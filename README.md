@@ -57,19 +57,18 @@ Set `[terminal].font_size` and optionally `[terminal].font` in
 
 ### C drivers
 
-Use `./nob build-c FILE` to build and `./nob export-c INPUT.mcs OUTPUT.c SYMBOL`
-to export a model. To run a driver from an embedded shell, execute
-`"$MCMUX_HOST" --run-driver "$(realpath FILE)"`. mcmux saves its open worlds,
-releases the world sessions and sends build and driver output to the calling
-terminal. Reopen the save in mc-gui to see the driver's changes.
-Use `Ctrl+b` then `k` to cancel the driver.
+| Terminal pane | Neovim | Purpose |
+| --- | --- | --- |
+| `mcmake FILE.c` | `:mcmake` | Build the C driver. |
+| `mcrun FILE.c` | `:mcrun` | Save and release open worlds, then build and run the driver. |
+| `mcmodel FILE.c` | `:mcmodel` | Export the model specified by `// mcmux-model: INPUT.mcs OUTPUT.c SYMBOL`. |
 
-For optional Neovim commands, source
-[`integrations/nvim/mcmux.lua`](integrations/nvim/mcmux.lua) from your own
-`init.lua`. It registers commands inside mcmux terminal panes and needs
-Neovim 0.11 or later. Available commands are `:McBuild`, `:McRun` and
-`:McModel`. Build and run save the current C file first and show output in a
-Neovim terminal buffer.
+Reopen the save in mc-gui to see the driver's changes. Use `Ctrl+b` then
+`k` to cancel the driver.
+
+Run `nvim` (0.10 or later) inside a mcmux terminal pane to use the shortcuts
+with your existing Neovim configuration. They save the current C file and
+show output in a Neovim terminal buffer.
 
 ## mc-gui
 

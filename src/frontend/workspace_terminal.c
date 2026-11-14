@@ -327,6 +327,26 @@ static void child_environment(int fd, const char *config)
     char *cwd = getcwd(NULL, 0);
     if (cwd) {
         (void)setenv("MCMUX_PROJECT", cwd, 1);
+        const char *path = getenv("PATH");
+        if (!path || !*path) path = "/usr/bin:/bin";
+        const char suffix[] = "/integrations/bin";
+        size_t capacity = strlen(cwd) + sizeof suffix + strlen(path) + 1;
+        char *task_path = malloc(capacity);
+        if (task_path) {
+            snprintf(task_path, capacity, "%s%s:%s", cwd, suffix, path);
+            (void)setenv("PATH", task_path, 1);
+            free(task_path);
+        }
+        const char *data_dirs = getenv("XDG_DATA_DIRS");
+        if (!data_dirs || !*data_dirs) data_dirs = "/usr/local/share:/usr/share";
+        const char integrations[] = "/integrations";
+        size_t data_capacity = strlen(cwd) + sizeof integrations + strlen(data_dirs) + 1;
+        char *terminal_data_dirs = malloc(data_capacity);
+        if (terminal_data_dirs) {
+            snprintf(terminal_data_dirs, data_capacity, "%s%s:%s", cwd, integrations, data_dirs);
+            (void)setenv("XDG_DATA_DIRS", terminal_data_dirs, 1);
+            free(terminal_data_dirs);
+        }
         free(cwd);
     }
     char executable[4096];
