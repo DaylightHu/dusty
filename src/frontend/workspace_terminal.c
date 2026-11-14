@@ -9,6 +9,7 @@
 #if defined(__linux__) || defined(__APPLE__)
 #include "app_config.h"
 #include "ui_font.h"
+#include "rlgl.h"
 #include "../../third_party/libvterm/include/vterm.h"
 
 #include <errno.h>
@@ -51,6 +52,7 @@ struct WorkspaceTerminal {
     unsigned int buttons;
     int rows, cols, font_size, cell_width, cell_height, cursor_shape, mouse_mode;
     float scale;
+    unsigned char background_alpha;
     unsigned int config_revision;
     VTermPos cursor;
     RenderTexture2D pixels;
@@ -506,6 +508,7 @@ static VTermScreenCell cell_at(WorkspaceTerminal *terminal, int row, int col)
     VTermScreenCell cell = {.width = 1};
     vterm_color_rgb(&cell.fg, foreground.r, foreground.g, foreground.b);
     vterm_color_rgb(&cell.bg, background.r, background.g, background.b);
+    cell.bg.type |= VTERM_COLOR_DEFAULT_BG;
     int line = row - (int)terminal->scroll;
     if (line >= 0) {
         vterm_screen_get_cell(terminal->screen, (VTermPos){line, col}, &cell);
@@ -518,6 +521,22 @@ static VTermScreenCell cell_at(WorkspaceTerminal *terminal, int row, int col)
     return cell;
 }
 
+static Color cell_background(WorkspaceTerminal *terminal, const VTermScreenCell *cell)
+{
+    VTermColor color = cell->attrs.reverse ? cell->fg : cell->bg;
+    Color result = terminal_color(terminal, color);
+    if (VTERM_COLOR_IS_DEFAULT_BG(&color)) result.a = terminal->background_alpha;
+    return result;
+}
+
+static Color premultiply(Color color)
+{
+    color.r = (color.r * color.a + 127) / 255;
+    color.g = (color.g * color.a + 127) / 255;
+    color.b = (color.b * color.a + 127) / 255;
+    return color;
+}
+
 static void draw_row(WorkspaceTerminal *terminal, int row)
 {
     int width = terminal->cell_width, y = row * terminal->cell_height;
@@ -525,19 +544,23 @@ static void draw_row(WorkspaceTerminal *terminal, int row)
     for (int col = 0; col < terminal->cols; ++col)
         cells[col] = cell_at(terminal, row, col);
     /* Paint backgrounds before glyphs so their overhang is preserved. */
+    if (terminal->background_alpha < 255) BeginBlendMode(BLEND_CUSTOM);
     for (int col = 0; col < terminal->cols;) {
         VTermScreenCell *cell = &cells[col];
-        Color bg = terminal_color(terminal, cell->attrs.reverse ? cell->fg : cell->bg);
+        Color bg = cell_background(terminal, cell);
         int end = col + cell->width;
         while (end < terminal->cols) {
             VTermScreenCell *next = &cells[end];
-            Color other = terminal_color(terminal, next->attrs.reverse ? next->fg : next->bg);
+            Color other = cell_background(terminal, next);
             if (ColorToInt(bg) != ColorToInt(other)) break;
             end += next->width;
         }
+        if (bg.a < 255) bg = premultiply(bg);
         DrawRectangle(col * width, y, (end - col) * width, terminal->cell_height, bg);
         col = end;
     }
+    // Store premultiplied RGBA including antialiased glyph edges.
+    if (terminal->background_alpha < 255) BeginBlendMode(BLEND_CUSTOM_SEPARATE);
     for (int col = 0; col < terminal->cols; ++col) {
         const VTermScreenCell *cell = &cells[col];
         if (cell->chars[0] == UINT32_MAX || cell->attrs.conceal) continue;
@@ -597,25 +620,47 @@ static void terminal_size(WorkspaceTerminal *terminal, Rectangle box)
     invalidate(terminal);
 }
 
-void workspace_terminal_draw(WorkspaceTerminal *terminal, Rectangle box, bool focused)
+void workspace_terminal_draw(WorkspaceTerminal *terminal, Rectangle box, bool focused,
+                             float background_opacity)
 {
     terminal_size(terminal, box);
-    DrawRectangleRec(box, background);
+    Color pane_background = background;
+    pane_background.a = (unsigned char)(255 * background_opacity + .5f);
+    if (terminal->background_alpha != pane_background.a) {
+        terminal->background_alpha = pane_background.a;
+        invalidate(terminal);
+    }
+
+    bool translucent = pane_background.a < 255;
+    if (translucent) {
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+        BeginBlendMode(BLEND_CUSTOM);
+        pane_background = premultiply(pane_background);
+    }
+    DrawRectangleRec(box, pane_background);
+    if (translucent) EndBlendMode();
     if (terminal->pixels.id) {
         bool redraw = false;
         for (int i = 0; i < terminal->rows; ++i) redraw |= terminal->dirty[i];
         if (redraw) {
             BeginTextureMode(terminal->pixels);
+            rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA,
+                                      RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
+            if (!translucent) BeginBlendMode(BLEND_CUSTOM_SEPARATE);
             for (int i = 0; i < terminal->rows; ++i)
                 if (terminal->dirty[i]) draw_row(terminal, i);
+            EndBlendMode();
             EndTextureMode();
         }
         Texture2D texture = terminal->pixels.texture;
         Rectangle area = {box.x + 6, box.y + 6,
                            texture.width / terminal->scale, texture.height / terminal->scale};
         BeginScissorMode((int)box.x + 1, (int)box.y + 1, (int)box.width - 2, (int)box.height - 2);
+        // Replace the pane fill with the cached cells without blending the background twice.
+        if (translucent) BeginBlendMode(BLEND_CUSTOM);
         DrawTexturePro(texture, (Rectangle){0, 0, texture.width, -texture.height},
                        area, (Vector2){0}, 0, WHITE);
+        if (translucent) EndBlendMode();
         if (!workspace_terminal_exited(terminal) && terminal->cursor_visible && !terminal->scroll &&
             (!terminal->cursor_blink || !focused || (int)(GetTime() * 2) % 2 == 0)) {
             float w = terminal->cell_width / terminal->scale;
@@ -776,8 +821,8 @@ void workspace_terminal_close(WorkspaceTerminal *terminal) { (void)terminal; }
 bool workspace_terminal_exited(const WorkspaceTerminal *terminal) { (void)terminal; return true; }
 void workspace_terminal_poll(WorkspaceTerminal *terminal, WorkspaceRunRequest run, void *context)
 { (void)terminal; (void)run; (void)context; }
-void workspace_terminal_draw(WorkspaceTerminal *terminal, Rectangle box, bool focused)
-{ (void)terminal; (void)box; (void)focused; }
+void workspace_terminal_draw(WorkspaceTerminal *terminal, Rectangle box, bool focused, float background_opacity)
+{ (void)terminal; (void)box; (void)focused; (void)background_opacity; }
 void workspace_terminal_focus(WorkspaceTerminal *terminal, bool focused)
 { (void)terminal; (void)focused; }
 void workspace_terminal_input(WorkspaceTerminal *terminal) { (void)terminal; }

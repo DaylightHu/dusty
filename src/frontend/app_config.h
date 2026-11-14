@@ -11,6 +11,7 @@ typedef struct {
     int fps_limit, msaa_samples, terminal_font_size;
     int stream_radius, leader_timeout_ms;
     float fov, mouse_sensitivity, move_speed, scroll_lines;
+    float terminal_background_opacity;
     char terminal_font[4096];
 } AppSettings;
 
