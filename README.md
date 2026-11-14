@@ -34,14 +34,17 @@ Use a C compiler to compile `nob.c` into the `nob` build runner. Then run the
 
 ## Use mcmux
 
-| Command | Purpose |
-| --- | --- |
-| `Ctrl+b` then `%` | Open a terminal or split left/right. |
-| `Ctrl+b` then `"` | Split top/bottom. |
-| `Ctrl+b` then `g` | Restore and focus mc-gui. |
-| `Ctrl+b` then `x` | Close the focused pane. |
-| `Ctrl+b` then `,` / `r` | Open settings in Neovim / reload settings. |
-| `Ctrl+b` then `?` | Show workspace bindings. |
+### Workspace key bindings
+
+On Linux and macOS, edit `$XDG_CONFIG_HOME/mcmux/config.toml` (default
+`~/.config/mcmux/config.toml`). On Windows, the default directory is
+`%APPDATA%/mcmux`. Set `MCMUX_CONFIG` to an absolute path to use a different file.
+
+Set the prefix in `[workspace].leader` and bind workspace actions in
+`[keys.workspace]`. A binding can be a chord such as `Ctrl+Shift+T` or a
+sequence such as `Leader+t`. Set `leader = ""` to disable the prefix and its
+sequences. Use the `help` action to see the active bindings, `config` to open
+the configuration, and `reload_config` to reload it.
 
 ### Terminal panes
 
@@ -49,8 +52,8 @@ A terminal pane runs your shell from the project root. On Linux and macOS it
 uses a PTY and the bundled libvterm. Run `nvim` in the pane to use your own
 Neovim configuration. Use `Ctrl+Shift+V` to paste and `Shift+PageUp` or
 `Shift+PageDown` to scroll. On Windows the world GUI is available and terminal
-panes are unsupported. Press the workspace leader twice to pass it into the
-focused terminal.
+panes are unsupported. When using a workspace leader, press it twice to pass
+it into the focused terminal.
 
 Set `[terminal].font_size` and optionally `[terminal].font` in
 `config.toml`. The font setting accepts a path to a monospace TTF.
@@ -63,8 +66,8 @@ Set `[terminal].font_size` and optionally `[terminal].font` in
 | `mcrun FILE.c` | `:mcrun` | Save and release open worlds, then build and run the driver. |
 | `mcmodel FILE.c` | `:mcmodel` | Export the model specified by `// mcmux-model: INPUT.mcs OUTPUT.c SYMBOL`. |
 
-Reopen the save in mc-gui to see the driver's changes. Use `Ctrl+b` then
-`k` to cancel the driver.
+Reopen the save in mc-gui to see the driver's changes. Use the workspace
+`cancel_run` action to cancel the driver.
 
 Run `nvim` (0.10 or later) inside a mcmux terminal pane to use the shortcuts
 with your existing Neovim configuration. They save the current C file and
