@@ -396,6 +396,7 @@ WorkspaceTerminal *workspace_terminal_open(const char *edit_path, Rectangle box,
     vterm_screen_set_callbacks(terminal->screen, &callbacks, terminal);
     vterm_screen_set_damage_merge(terminal->screen, VTERM_DAMAGE_ROW);
     vterm_screen_enable_altscreen(terminal->screen, 1);
+    vterm_screen_enable_reflow(terminal->screen, true);
     VTermColor fg, bg;
     vterm_color_rgb(&fg, foreground.r, foreground.g, foreground.b);
     vterm_color_rgb(&bg, background.r, background.g, background.b);
