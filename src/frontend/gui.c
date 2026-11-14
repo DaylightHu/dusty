@@ -16,9 +16,8 @@
 #include "world_renderer.h"
 #include "world_msaa.h"
 #include "workspace_layout.h"
-#include "workspace_editor.h"
-#include "workspace_output.h"
-#include "workspace_code.h"
+#include "workspace_terminal.h"
+#include "workspace_driver.h"
 #include "world_session_manager.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -121,10 +120,8 @@ typedef struct {
     bool running;
     bool fatal_error;
     WorkspaceLayout workspace;
-    WorkspaceEditor *editors[WORKSPACE_TEXT_LIMIT];
-    WorkspaceOutput *output;
-    WorkspaceCode *code;
-    int output_pane;
+    WorkspaceTerminal *terminals[WORKSPACE_TEXT_LIMIT];
+    WorkspaceDriver driver;
     /* Borrowed from the host; frontends may select sessions but do not own them. */
     WorldSessionManager *world_sessions;
     RenderTexture2D gui_target;
@@ -135,7 +132,7 @@ typedef struct {
     unsigned config_revision;
     int help_scroll;
     bool pointer_resizing, pointer_guard;
-    int pointer_divider, pointer_pane;
+    int pointer_divider;
     bool window_gui_visible, window_text_visible, window_resize_pending;
     bool program_active, program_gui_visible, skip_world_advance;
     int window_width, window_height, window_text_width;
@@ -472,14 +469,14 @@ static void return_to_title(GuiApp *app)
     refresh_saves(app);
 }
 
-static bool close_pane(GuiApp *app, bool force);
+static bool close_pane(GuiApp *app);
 
 static void detach_gui_frontend(GuiApp *app)
 {
     close_world(app);
     app->screen = GUI_TITLE;
     workspace_layout_show_gui(&app->workspace);
-    if (!close_pane(app, false))
+    if (!close_pane(app))
         snprintf(app->pane_message, sizeof(app->pane_message),
                  "GUI remains open because no text pane could be created");
 }
@@ -1912,16 +1909,6 @@ static bool initialize(GuiApp *app, WorldSessionManager *world_sessions)
         return false;
     }
     workspace_layout_init(&app->workspace);
-    app->output=workspace_output_create();
-    if (!app->output) {
-        fprintf(stderr,"Cannot allocate mc-output history\n");
-        return false;
-    }
-    app->code=workspace_code_create();
-    if (!app->code) {
-        fprintf(stderr,"Cannot allocate code navigation state\n");
-        return false;
-    }
     app->workspace.gui_width = GetScreenWidth();
     app->window_gui_visible = true;
     app->window_width = GetScreenWidth();
@@ -1929,8 +1916,7 @@ static bool initialize(GuiApp *app, WorldSessionManager *world_sessions)
     app->window_text_width = WORKSPACE_TEXT_WIDTH;
     refresh_saves(app);
     if (!config_ok) {
-        snprintf(app->pane_message,sizeof(app->pane_message),"Configuration error; using defaults (see mc-output)");
-        workspace_output_message(app->output,app_config_error(),true);
+        snprintf(app->pane_message, sizeof(app->pane_message), "Config: %s", app_config_error());
     }
     return true;
 }
@@ -1938,14 +1924,9 @@ static bool initialize(GuiApp *app, WorldSessionManager *world_sessions)
 static void shutdown_gui(GuiApp *app)
 {
     close_world(app);
-    for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
-        workspace_editor_destroy(app->editors[i]);
-        app->editors[i] = NULL;
-    }
-    workspace_output_destroy(app->output);
-    app->output=NULL;
-    workspace_code_destroy(app->code);
-    app->code=NULL;
+    workspace_driver_close(&app->driver);
+    for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i)
+        workspace_terminal_close(app->terminals[i]);
     if (app->gui_target.id) UnloadRenderTexture(app->gui_target);
     app->gui_target = (RenderTexture2D){0};
     if (app->title_background.id) UnloadTexture(app->title_background);
@@ -1953,6 +1934,7 @@ static void shutdown_gui(GuiApp *app)
     hotbar_unload(&app->hotbar);
     inventory_unload(&app->inventory);
     block_renderer_unload(&app->blocks);
+    ui_terminal_font_unload();
     ui_font_unload();
     if (IsWindowReady()) CloseWindow();
 }
@@ -1967,7 +1949,7 @@ static int workspace_height(const GuiApp *app)
     int height = GetScreenHeight();
     WorkspaceGeometry geometry;
     workspace_layout_geometry(&app->workspace, GetScreenWidth(), height, &geometry);
-    if (app->session || app->screen == GUI_SAVE_ERROR || app->pane_message[0] || geometry.compact)
+    if (app->session || app->program_active || app->screen == GUI_SAVE_ERROR || app->pane_message[0] || geometry.compact)
         height -= WORKSPACE_STATUS_HEIGHT;
     return height > 0 ? height : 1;
 }
@@ -2048,10 +2030,10 @@ static void pane_notice(GuiApp *app, const char *text)
     snprintf(app->pane_message, sizeof(app->pane_message), "%s", text);
 }
 
-/* The editor/output stay responsive while the child owns simulation time. */
+/* Terminal panes stay responsive while the driver owns simulation time. */
 static void sync_program_activity(GuiApp *app)
 {
-    bool active = workspace_output_is_program_running(app->output);
+    bool active = app->driver.process > 0;
     if (active && !app->program_active) {
         app->program_gui_visible = app->workspace.gui_visible;
     } else if (!active && app->program_active) {
@@ -2061,6 +2043,7 @@ static void sync_program_activity(GuiApp *app)
             game_session_reset_clock(world_session_manager_at(app->world_sessions, i));
         /* The last frame may include time spent waiting for the child. */
         app->skip_world_advance = true;
+        refresh_saves(app);
     }
     app->program_active = active;
     /* An exit-time save error must remain visible and actionable. */
@@ -2071,36 +2054,33 @@ static void sync_program_activity(GuiApp *app)
     }
 }
 
-static bool prepare_program_run(void *context, WorkspaceEditor *editor)
+static void run_program(void *context, const char *source, int reply, int output)
 {
     GuiApp *app = context;
-    if (app->session && app->screen == GUI_BARREL) {
-        (void)world_close_barrel(game_session_world(app->session), app->barrel_pos);
-        app->screen = GUI_WORLD;
+    char error[512];
+    if (app->driver.process > 0) snprintf(error, sizeof error, "A simulation driver is already running");
+    else if (workspace_driver_validate(source, error, sizeof error)) {
+        if (app->session && app->screen == GUI_BARREL) {
+            (void)world_close_barrel(game_session_world(app->session), app->barrel_pos);
+            app->screen = GUI_WORLD;
+        }
+        GameSession *failed_session = NULL;
+        GameSessionResult result = save_all_worlds(app, &failed_session);
+        if (result == GAME_SESSION_OK) {
+            if (workspace_driver_start(&app->driver, source, reply, output)) {
+                return_to_title(app);
+                /* A driver can write any save, including worlds without a visible pane. */
+                world_session_manager_clear(app->world_sessions);
+                app->screen_before_error = GUI_TITLE;
+                app->after_save = AFTER_SAVE_NONE;
+                sync_program_activity(app);
+            }
+            return;
+        }
+        snprintf(error, sizeof error, "Cannot run: %s save failed: %s",
+                 managed_world_name(app, failed_session), game_session_result_name(result));
     }
-    GameSession *failed_session = NULL;
-    GameSessionResult result = save_all_worlds(app, &failed_session);
-    if (result != GAME_SESSION_OK) {
-        char message[MESSAGE_CAPACITY];
-        snprintf(message, sizeof(message), "Cannot run: %s save failed: %s",
-                 managed_world_name(app, failed_session),
-                 game_session_result_name(result));
-        workspace_editor_message(editor, message, true);
-        return false;
-    }
-
-    return_to_title(app);
-    /* A C program may write any save, including worlds without a GUI pane. */
-    world_session_manager_clear(app->world_sessions);
-    if (app->gui_target.id) UnloadRenderTexture(app->gui_target);
-    app->gui_target = (RenderTexture2D){0};
-    app->camera = (Camera3D){0};
-    app->screen_before_error = GUI_TITLE;
-    app->after_save = AFTER_SAVE_NONE;
-    app->world_name[0] = '\0';
-    app->world_name_length = 0;
-    app->workspace.gui_visible = false;
-    return true;
+    workspace_driver_reject(reply, output, error);
 }
 
 static bool prepare_gui_view(GuiApp *app)
@@ -2162,79 +2142,51 @@ static void apply_pane_focus(GuiApp *app)
     while (app_input_char() != 0) {}
 }
 
-static int split_editor_pane(GuiApp *app, bool split_x)
+static int split_terminal_pane(GuiApp *app, bool split_x, const char *edit_path)
 {
-    int slot = 1;
-    while (slot <= WORKSPACE_TEXT_LIMIT &&
-           workspace_layout_has_pane(&app->workspace, slot)) ++slot;
-    if (slot > WORKSPACE_TEXT_LIMIT) {
-        pane_notice(app, "Maximum text pane count reached");
-        return -1;
-    }
-    WorkspaceEditor *editor = workspace_editor_create();
-    if (!editor) {
-        pane_notice(app, "Cannot allocate an mc-nvim pane");
-        return -1;
-    }
-    int pane = workspace_layout_split(&app->workspace, split_x,
-        GetScreenWidth(), workspace_height(app));
+    WorkspaceLayout next = app->workspace;
+    int pane = workspace_layout_split(&next, split_x, GetScreenWidth(), workspace_height(app));
     if (pane < 0) {
-        workspace_editor_destroy(editor);
-        pane_notice(app,
-            "No room for a new mc-nvim pane; enlarge the window or close a pane");
+        pane_notice(app, "No room for a terminal pane; enlarge the window or close a pane");
         return -1;
     }
-    app->editors[pane - 1] = editor;
-    workspace_editor_set_output(editor,app->output,pane);
-    workspace_editor_set_code(editor,app->code);
+    char error[MESSAGE_CAPACITY];
+    WorkspaceGeometry geometry;
+    workspace_layout_geometry(&next, GetScreenWidth(), workspace_height(app), &geometry);
+    WorkspaceTerminal *terminal = workspace_terminal_open(edit_path,
+        pane_rectangle(geometry.panes[pane - 1]), error, sizeof error);
+    if (!terminal) {
+        pane_notice(app, error);
+        return -1;
+    }
+    app->terminals[pane - 1] = terminal;
+    app->workspace = next;
     app->pane_message[0] = '\0';
     return pane;
 }
 
-static int open_output_pane(GuiApp *app)
-{
-    if (app->output_pane && workspace_layout_has_pane(&app->workspace,app->output_pane)) {
-        app->workspace.focus=app->output_pane;
-        return app->output_pane;
-    }
-    int pane=workspace_layout_split(&app->workspace,false,
-        GetScreenWidth(),workspace_height(app));
-    if (pane<0) {
-        pane_notice(app,"No room for mc-output; enlarge the window or close a pane");
-        return -1;
-    }
-    app->output_pane=pane;
-    app->pane_message[0]='\0';
-    return pane;
-}
-
-static bool close_pane(GuiApp *app, bool force)
+static bool close_pane(GuiApp *app)
 {
     int pane = app->workspace.focus;
     if (!pane && app->workspace.root < 0) {
-        if (split_editor_pane(app, false) < 0) return false;
+        if (split_terminal_pane(app, false, NULL) < 0) return false;
         app->workspace.focus = 0;
     }
-    if (app->program_active && pane > 0 && app->workspace.root >= 0 &&
+    if (app->program_active && pane > 0 &&
         app->workspace.nodes[app->workspace.root].first < 0) {
-        pane_notice(app, "Keep a text pane open until :make/:run/:model finishes");
+        pane_notice(app, "Keep a terminal open until the driver finishes");
         return false;
     }
-    if (!force && pane > 0 && app->editors[pane - 1] &&
-        workspace_editor_has_unsaved(app->editors[pane - 1])) {
-        pane_notice(app, "mc-nvim has unsaved buffers; save them with :w before closing");
-        workspace_editor_message(app->editors[pane - 1],
-            "unsaved buffers; :e each file and :w before closing", true);
-        return false;
-    }
+    if (pane > 0 && !app->workspace.gui_visible && !app->program_active &&
+        app->workspace.nodes[app->workspace.root].first < 0)
+        app->workspace.gui_visible = true;
     if (!workspace_layout_close(&app->workspace)) {
         pane_notice(app, "Keep one pane open; close the host window to end the workspace");
         return false;
     }
     if (pane > 0) {
-        if (pane==app->output_pane) app->output_pane=0;
-        workspace_editor_destroy(app->editors[pane - 1]);
-        app->editors[pane - 1] = NULL;
+        workspace_terminal_close(app->terminals[pane - 1]);
+        app->terminals[pane - 1] = NULL;
     } else if (app->session && app->screen == GUI_BARREL) {
         (void)world_close_barrel(game_session_world(app->session), app->barrel_pos);
         app->screen = GUI_WORLD;
@@ -2247,9 +2199,6 @@ static bool close_pane(GuiApp *app, bool force)
 static void cancel_workspace_pointer(GuiApp *app)
 {
     app->pointer_resizing = false;
-    app->pointer_pane = 0;
-    for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i)
-        workspace_editor_cancel_pointer(app->editors[i]);
 }
 
 /* A press belongs to one pane/divider until release, even outside its bounds. */
@@ -2271,13 +2220,12 @@ static bool update_workspace_pointer(GuiApp *app)
     WorkspaceGeometry geometry;
     workspace_geometry(app, &geometry);
     int width = GetScreenWidth(), height = workspace_height(app);
-    WorkspaceEditorPointer pointer = {.position = point, .wheel = GetMouseWheelMoveV(),
-        .pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT),
-        .down = IsMouseButtonDown(MOUSE_BUTTON_LEFT),
-        .released = IsMouseButtonReleased(MOUSE_BUTTON_LEFT), .time = GetTime()};
-    if ((app->pointer_resizing || app->pointer_pane) && IsKeyPressed(KEY_ESCAPE)) {
+    bool pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    bool released = IsMouseButtonReleased(MOUSE_BUTTON_LEFT);
+    if (app->pointer_resizing && IsKeyPressed(KEY_ESCAPE)) {
         cancel_workspace_pointer(app);
-        return false;
+        return true;
     }
     if (app->pointer_resizing) {
         int divider = app->pointer_divider;
@@ -2286,45 +2234,35 @@ static bool update_workspace_pointer(GuiApp *app)
         if (workspace_layout_drag_divider(&app->workspace, divider,
                 (int)(vertical ? point.x : point.y), width, height) && divider == -2)
             SetWindowMinSize(app->workspace.gui_width + WORKSPACE_DIVIDER + WORKSPACE_MIN_WIDTH, 650);
-        if (!pointer.down) app->pointer_resizing = false;
-        return true;
-    }
-    if (app->pointer_pane) {
-        int i = app->pointer_pane - 1;
-        if (geometry.visible[i] && app->editors[i]) {
-            SetMouseCursor(MOUSE_CURSOR_IBEAM);
-            if (!workspace_editor_pointer(app->editors[i], pane_rectangle(geometry.panes[i]), pointer))
-                app->pointer_pane = 0;
-        } else cancel_workspace_pointer(app);
+        if (!down) app->pointer_resizing = false;
         return true;
     }
     int divider = workspace_layout_divider_at(&app->workspace, width, height, (int)point.x, (int)point.y);
     if (divider != -1) {
         bool vertical = divider == -2 || app->workspace.nodes[divider].split_x;
         SetMouseCursor(vertical ? MOUSE_CURSOR_RESIZE_EW : MOUSE_CURSOR_RESIZE_NS);
-        if (pointer.pressed) {
+        if (pressed) {
             app->pointer_resizing = true;
             app->pointer_divider = divider;
         }
-        return pointer.pressed || pointer.down || pointer.released;
+        return pressed || down || released;
     }
     for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
         if (!geometry.visible[i] || !CheckCollisionPointRec(point, pane_rectangle(geometry.panes[i]))) continue;
-        if (pointer.pressed) {
+        if (pressed) {
             app->pane_prefix = false;
             if (app->workspace.focus != i + 1) {
                 app->workspace.focus = i + 1;
                 apply_pane_focus(app);
             }
         }
-        if (i + 1 == app->output_pane) workspace_output_scroll(app->output, pointer.wheel);
-        else if (app->editors[i] &&
-                 workspace_editor_pointer(app->editors[i], pane_rectangle(geometry.panes[i]), pointer))
-            app->pointer_pane = i + 1;
-        return pointer.pressed || pointer.wheel.x != 0 || pointer.wheel.y != 0;
+        if (app->terminals[i] && !app->pane_prefix)
+            workspace_terminal_pointer(app->terminals[i], pane_rectangle(geometry.panes[i]), point);
+        return pressed;
+
     }
     if (geometry.gui.width > 0 && CheckCollisionPointRec(point, pane_rectangle(geometry.gui)) &&
-        (pointer.pressed || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE))) {
+        (pressed || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE))) {
         if (app->workspace.focus != 0 || app->pane_prefix ||
             (app->screen == GUI_WORLD && !app->mouse_captured)) {
             app->pane_prefix = false;
@@ -2340,38 +2278,26 @@ static bool update_workspace_pointer(GuiApp *app)
 
 static void reload_user_config(GuiApp *app)
 {
-    for (int i=0;i<WORKSPACE_TEXT_LIMIT;++i) if (workspace_editor_config_dirty(app->editors[i])) {
-        pane_notice(app,"Save configuration with :w before reloading");
-        return;
-    }
-    if (!app_config_reload()) {
-        pane_notice(app,"Configuration error; keeping previous settings (see mc-output)");
-        workspace_output_message(app->output,app_config_error(),true);
-    } else pane_notice(app,"Configuration reloaded from disk");
+    if (app_config_reload()) pane_notice(app, "Configuration reloaded from disk");
+    else pane_notice(app, app_config_error());
 }
 
 static void open_user_config(GuiApp *app)
 {
-    if (!app_config_ensure_file()) {
-        pane_notice(app,"Cannot open configuration (see mc-output)");
-        workspace_output_message(app->output,app_config_error(),true); return;
-    }
-    int pane=app->workspace.focus;
-    if (pane<=0 || pane==app->output_pane || !app->editors[pane-1]) {
-        pane=0;
-        for (int i=0;i<WORKSPACE_TEXT_LIMIT;++i) if (app->editors[i]) { pane=i+1;break; }
-        if (!pane) pane=split_editor_pane(app,true);
-    }
-    if (pane<=0) return;
-    app->workspace.focus=pane;
-    (void)workspace_editor_command(app->editors[pane-1],"config",prepare_program_run,app);
-    apply_pane_focus(app);
+    if (!app_config_ensure_file()) pane_notice(app, app_config_error());
+    else (void)split_terminal_pane(app, false, app_config_path());
 }
 
-/* Workspace chords consume the frame before any editor or world receives it. */
+/* Workspace chords consume the frame before any terminal or world receives it. */
 static bool update_pane_keys(GuiApp *app)
 {
     if (app_input_leader()) {
+        if (app->pane_prefix && app->workspace.focus > 0) {
+            app->pane_prefix = false;
+            workspace_terminal_input(app->terminals[app->workspace.focus - 1]);
+            app_input_discard();
+            return true;
+        }
         cancel_workspace_pointer(app); app->pane_help=false; app->pane_prefix=true;
         app->pane_message[0]=0;
         int timeout=app_config_current()->leader_timeout_ms;
@@ -2393,8 +2319,8 @@ static bool update_pane_keys(GuiApp *app)
     }
     const char *action=app_input_workspace(app->pane_prefix);
     if (!action) return app->pane_prefix;
-    if (!strcmp(action,"split_horizontal")) (void)split_editor_pane(app,true);
-    else if (!strcmp(action,"split_vertical")) (void)split_editor_pane(app,false);
+    if (!strcmp(action,"split_horizontal")) (void)split_terminal_pane(app, true, NULL);
+    else if (!strcmp(action,"split_vertical")) (void)split_terminal_pane(app, false, NULL);
     else if (!strncmp(action,"focus_",6) || !strncmp(action,"resize_",7)) {
         bool resize=!strncmp(action,"resize_",7);
         const char *direction=action+(resize ? 7 : 6);
@@ -2406,10 +2332,11 @@ static bool update_pane_keys(GuiApp *app)
             pane_notice(app,changed ? "Text divider moved" : "No movable text divider");
         } else (void)workspace_layout_focus(&app->workspace,d,GetScreenWidth(),workspace_height(app));
     } else if (!strcmp(action,"next_pane")) workspace_layout_next(&app->workspace);
-    else if (!strcmp(action,"output")) (void)open_output_pane(app);
+    else if (!strcmp(action,"terminal")) (void)split_terminal_pane(app, false, NULL);
     else if (!strcmp(action,"zoom")) {
         if (!workspace_layout_zoom(&app->workspace)) pane_notice(app,"Zoom applies to text panes");
-    } else if (!strcmp(action,"close_pane")) (void)close_pane(app,false);
+    } else if (!strcmp(action,"close_pane")) (void)close_pane(app);
+    else if (!strcmp(action,"cancel_run")) workspace_driver_cancel(&app->driver, GetTime());
     else if (!strcmp(action,"world")) {
         if (app->program_active) pane_notice(app,"Stop the active C task before returning to mc-gui");
         else workspace_layout_show_gui(&app->workspace);
@@ -2421,26 +2348,23 @@ static bool update_pane_keys(GuiApp *app)
     app_input_discard(); return true;
 }
 
-static void update_text_pane(GuiApp *app)
+static void poll_terminals(GuiApp *app)
 {
-    int pane = app->workspace.focus;
-    if (pane>0 && pane==app->output_pane) {
-        workspace_output_update(app->output);
-        return;
-    }
-    if (pane <= 0 || !app->editors[pane - 1]) return;
-    WorkspaceEditorAction action = workspace_editor_update(app->editors[pane - 1],
-        prepare_program_run, app);
-    if (action == WORKSPACE_EDITOR_QUIT ||
-        action == WORKSPACE_EDITOR_QUIT_FORCE) {
-        bool force = action == WORKSPACE_EDITOR_QUIT_FORCE;
-        if (!close_pane(app, force)) {
-            if (pane > 0 && !app->workspace.gui_visible && !app->program_active) {
-                workspace_layout_show_gui(&app->workspace);
-                app->workspace.focus = pane;
-                (void)close_pane(app, force);
-            } else {
-                pane_notice(app, "Cannot close the last visible pane");
+    workspace_driver_poll(&app->driver, GetTime());
+    sync_program_activity(app);
+    for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
+        WorkspaceTerminal *terminal = app->terminals[i];
+        if (!terminal) continue;
+        workspace_terminal_focus(terminal, app->workspace.focus == i + 1 &&
+            IsWindowFocused() && !app->pane_help);
+        workspace_terminal_poll(terminal, run_program, app);
+        if (workspace_terminal_exited(terminal) && !app->program_active) {
+            int focus = app->workspace.focus;
+            app->workspace.focus = i + 1;
+            if (close_pane(app) && focus != i + 1 &&
+                workspace_layout_has_pane(&app->workspace, focus)) {
+                app->workspace.focus = focus;
+                apply_pane_focus(app);
             }
         }
     }
@@ -2458,13 +2382,10 @@ static VoxelHit update_workspace_input(GuiApp *app)
         app->camera.fovy=settings->fov;
         world_msaa_destroy(&app->world_msaa);
         cancel_workspace_pointer(app);
-        for (int i=0;i<WORKSPACE_TEXT_LIMIT;++i) workspace_editor_refresh(app->editors[i]);
         app->pane_prefix=false; app->pane_help=false;
         app->config_revision=app_config_revision();
     }
-    workspace_output_poll(app->output);
-    sync_program_activity(app);
-    workspace_code_poll(app->code);
+    poll_terminals(app);
     sync_workspace_window(app);
     if (!prepare_gui_view(app)) return hit;
     if (!IsWindowFocused() && app->workspace.focus == 0 && app->session &&
@@ -2484,7 +2405,8 @@ static VoxelHit update_workspace_input(GuiApp *app)
             return hit;
         }
         /* GUI modal keys are routed only while pane 0 owns focus. */
-        if (app->workspace.focus > 0) update_text_pane(app);
+        if (app->workspace.focus > 0)
+            workspace_terminal_input(app->terminals[app->workspace.focus - 1]);
         else if (app->screen == GUI_TITLE) update_title(app);
         else if (app->screen == GUI_PAUSE) {
             if (IsKeyPressed(KEY_ESCAPE)) {
@@ -2564,15 +2486,13 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
     }
     gui_view_reset();
     for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
-        if (geometry.visible[i] && app->output_pane==i+1)
-            workspace_output_draw(app->output,pane_rectangle(geometry.panes[i]),
-                app->workspace.focus==i+1);
-        if (geometry.visible[i] && app->editors[i])
-            workspace_editor_draw(app->editors[i], pane_rectangle(geometry.panes[i]),
+        if (geometry.visible[i] && app->terminals[i])
+            workspace_terminal_draw(app->terminals[i], pane_rectangle(geometry.panes[i]),
                 app->workspace.focus == i + 1);
     }
     int y = GetScreenHeight() - WORKSPACE_STATUS_HEIGHT;
-    const char *state = app->screen == GUI_SAVE_ERROR ? "SAVE ERROR" :
+    const char *state = app->program_active ? "DRIVER RUNNING" :
+        app->screen == GUI_SAVE_ERROR ? "SAVE ERROR" :
         !app->session ?
         "" :
         app->screen == GUI_PAUSE ? "GUI MENU" :

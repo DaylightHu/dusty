@@ -3,14 +3,15 @@
 #endif
 
 #include "frontend/gui.h"
+#include "frontend/workspace_terminal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(__APPLE__)
 #include "raylib.h"
 #include <limits.h>
-#include <string.h>
 
 static char asset_path[PATH_MAX];
 static size_t asset_prefix;
@@ -60,8 +61,14 @@ const char *gui_asset_path(const char *relative)
     return relative;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    if (argc == 3 && strcmp(argv[1], "--run-driver") == 0)
+        return workspace_terminal_request_run(argv[2]);
+    if (argc != 1) {
+        fprintf(stderr, "Usage: %s [--run-driver /absolute/path/to/file.c]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 #if defined(__APPLE__)
     if (!configure_mac_bundle()) {
         fputs("Cannot open the app resources or application data directory\n", stderr);

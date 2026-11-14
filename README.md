@@ -33,39 +33,47 @@ Use a C compiler to compile `nob.c` into the `nob` build runner. Then run the
 | `./nob help` | Show the available build commands. |
 
 ## Use mcmux
+
 | Command | Purpose |
 | --- | --- |
-| `Ctrl + b` & `%` | Open mc-nvim |
-| `Ctrl + b` & `g` | Open mc-gui |
-| `Ctrl + b` & `c` | Open mc-out |
-| `Ctrl + b` & `?` | Help |
+| `Ctrl+b` then `%` | Open a terminal or split left/right. |
+| `Ctrl+b` then `"` | Split top/bottom. |
+| `Ctrl+b` then `g` | Restore and focus mc-gui. |
+| `Ctrl+b` then `x` | Close the focused pane. |
+| `Ctrl+b` then `,` / `r` | Open settings in Neovim / reload settings. |
+| `Ctrl+b` then `?` | Show workspace bindings. |
 
+### Terminal panes
 
-## mc-nvim
+A terminal pane runs your shell from the project root. On Linux and macOS it
+uses a PTY and the bundled libvterm. Run `nvim` in the pane to use your own
+Neovim configuration. Use `Ctrl+Shift+V` to paste and `Shift+PageUp` or
+`Shift+PageDown` to scroll. On Windows the world GUI is available and terminal
+panes are unsupported. Press the workspace leader twice to pass it into the
+focused terminal.
 
-mc-nvim is the text workspace inside mcmux. The available editor actions are:
+Set `[terminal].font_size` and optionally `[terminal].font` in
+`config.toml`. The font setting accepts a path to a monospace TTF.
 
-| Mode or command | Action |
-| --- | --- |
-| Normal mode: `i` | Insert before the cursor. |
-| Normal mode: `a` | Insert after the cursor. |
-| Normal mode: `x` | Delete the character under the cursor. |
-| Normal mode: `h` `j` `k` `l` or arrow keys | Move the cursor. |
-| `Esc` | Return to Normal mode. |
-| `:Ex` | Browse the current directory. |
-| `:e PATH` | Open a file, or prepare a new file when it does not exist. |
-| `:w` | Save the current file. |
-| `:make` | Save and build the current C file, updating the core library as needed. |
-| `:run` | Save, build, and run the current C program from the project root. |
-| `:q` | Close the current pane when its buffers are saved. |
-| `:q!` | Close the current pane and discard its unsaved buffers. |
-| `:wq` | Save and close the current pane. |
-| `:! COMMAND` | Run an external build or program command from the pane directory. |
+### C drivers
+
+Use `./nob build-c FILE` to build and `./nob export-c INPUT.mcs OUTPUT.c SYMBOL`
+to export a model. To run a driver from an embedded shell, execute
+`"$MCMUX_HOST" --run-driver "$(realpath FILE)"`. mcmux saves its open worlds,
+releases the world sessions and sends build and driver output to the calling
+terminal. Reopen the save in mc-gui to see the driver's changes.
+Use `Ctrl+b` then `k` to cancel the driver.
+
+For optional Neovim commands, source
+[`integrations/nvim/mcmux.lua`](integrations/nvim/mcmux.lua) from your own
+`init.lua`. It registers commands inside mcmux terminal panes and needs
+Neovim 0.11 or later. Available commands are `:McBuild`, `:McRun` and
+`:McModel`. Build and run save the current C file first and show output in a
+Neovim terminal buffer.
 
 ## mc-gui
 
 World and simulation commands are entered in the GUI with `/` or `//`.
-mc-nvim's `:` commands operate on editor files and programs.
 
 When the crosshair targets redstone dust, the top-left HUD shows its current
 power level (0–15), including while ticking is frozen. The power line is hidden
