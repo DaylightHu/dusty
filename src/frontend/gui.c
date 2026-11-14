@@ -620,7 +620,7 @@ enum {
 
 typedef struct {
     Rectangle input, create, list, load, close;
-    int top, rows;
+    int rows;
 } TitleLayout;
 
 static int visible_save_rows(void)
@@ -642,7 +642,7 @@ static TitleLayout title_layout(void)
     int create_width = (width - 20)*3/8;
     int input_width = width - 20 - create_width;
     int action_width = (width - TITLE_GAP)/2;
-    TitleLayout layout = {.top=top, .rows=rows};
+    TitleLayout layout = {.rows=rows};
     layout.input = (Rectangle){(float)left, (float)(top + 40),
                               (float)input_width, TITLE_CONTROL_HEIGHT};
     layout.create = (Rectangle){(float)(left + input_width + 20), layout.input.y,
@@ -692,18 +692,14 @@ static void update_title(GuiApp *app)
 
 static void draw_title(GuiApp *app)
 {
-    const Color ink = {248, 226, 111, 255};
     const Color field_ink = {26, 50, 55, 255};
-    const Color list_ink = {255, 244, 195, 255};
+    const Color list_ink = {205, 214, 244, 255};
     bool active = app->workspace.focus == 0;
     draw_texture_cover(app->title_background);
     DrawRectangle(0, 0, gui_view_width(), gui_view_height(),
                   (Color){0, 27, 22, 72});
     TitleLayout layout = title_layout();
     Rectangle input = layout.input;
-    ui_text_draw("CREATE WORLD", (int)input.x + 2, layout.top + 2,
-                 TITLE_LABEL_SIZE, (Color){0, 35, 29, 230});
-    ui_text_draw("CREATE WORLD", (int)input.x, layout.top, TITLE_LABEL_SIZE, ink);
     DrawRectangleRec(input, (Color){247, 243, 230, 255});
     DrawRectangleLinesEx(input, 2.0f, (Color){92, 111, 112, 255});
     const char *input_text = app->world_name;
@@ -725,17 +721,12 @@ static void draw_title(GuiApp *app)
     if (button_with_font(layout.create, "Create", can_create, TITLE_TEXT_SIZE))
         create_world(app);
 
-    ui_text_draw("LOAD WORLD", (int)layout.list.x + 2, layout.top + 146,
-                 TITLE_LABEL_SIZE, (Color){0, 35, 29, 230});
-    ui_text_draw("LOAD WORLD", (int)layout.list.x, layout.top + 144,
-                 TITLE_LABEL_SIZE, ink);
     Rectangle list = layout.list;
-    DrawRectangleLinesEx(list, 2.0f, (Color){226, 207, 96, 255});
     begin_gui_scissor((int)list.x + 2, (int)list.y + 2,
                      (int)list.width - 4, (int)list.height - 4);
     if (!app->saves.count) {
         ui_text_draw("No saved worlds yet", (int)list.x + 22,
-                 (int)list.y + 22, TITLE_LABEL_SIZE, (Color){232, 220, 155, 255});
+                 (int)list.y + 22, TITLE_LABEL_SIZE, list_ink);
     }
     for (int row = 0; row < layout.rows; ++row) {
         int index = app->save_scroll + row;
