@@ -277,8 +277,12 @@ static bool read_settings(Config *next,toml_datum_t root)
         s->vsync=v.u.boolean;
     }
     v=toml_seek(root,"workspace.leader");
-    if (v.type!=TOML_UNKNOWN && (!binding_string(v) || !parse_trigger(v.u.s,&next->leader) || next->leader.leader))
-        return config_value_error("workspace.leader",v,"expected a single key or key chord");
+    if (v.type!=TOML_UNKNOWN) {
+        if (!binding_string(v) || (v.u.s[0] &&
+            (!parse_trigger(v.u.s,&next->leader) || next->leader.leader)))
+            return config_value_error("workspace.leader",v,"expected a key, key chord or empty string");
+        if (!v.u.s[0]) next->leader=(Trigger){0};
+    }
     return true;
 }
 static bool read_bindings(Config *next,toml_datum_t root)
@@ -387,11 +391,12 @@ bool app_config_ensure_file(void)
     if (!file) return errno==EEXIST || fail("cannot create %s: %s",config_path,strerror(errno));
     Config base; defaults(&base);
     fputs("# mcmux configuration. Missing settings keep built-in defaults.\n"
-        "# Save, then press the workspace leader followed by r to reload.\n"
+        "# Save, then use the reload_config binding to reload.\n"
         "# MCMUX_CONFIG may override this file with an absolute path.\n"
         "# Key values are strings or arrays; [] disables an action.\n"
         "# Each action replaces its default bindings only in the named scope.\n"
         "# Leader+X means press the workspace leader, release it, then X.\n"
+        "# Set workspace.leader to an empty string to disable the leader.\n"
         "# Modifiers: Ctrl, Shift, Alt/Opt, Super/Cmd. Named keys: Escape, Enter,\n"
         "# Tab, Space, arrows, Home, End, PageUp, PageDown, Backspace, Delete, F1..F12.\n"
         "# A single printable character uses the typed character (keyboard-layout aware).\n"
@@ -450,6 +455,7 @@ void app_config_describe(AppKeyScope scope,const char *name,char *text,size_t ca
         const char *trigger=b->trigger.text;
         char expanded[140];
         if (b->trigger.leader) {
+            if (!current.leader.text[0]) continue;
             snprintf(expanded,sizeof(expanded),"%s then %s",current.leader.text,trigger+7); trigger=expanded;
         }
         if (used<capacity) snprintf(text+used,capacity-used,"%s%s",used ? " / " : "",trigger);
@@ -482,7 +488,7 @@ static bool match(const Trigger *t,bool held)
     for (int i=0;i<physical.count;++i) if (physical.chars[i]==t->character) return true;
     return false;
 }
-bool app_input_leader(void) { return match(&current.leader,false); }
+bool app_input_leader(void) { return current.leader.text[0] && match(&current.leader,false); }
 const char *app_input_workspace(bool after_leader)
 {
     for (size_t i=0;i<current.count;++i) {
