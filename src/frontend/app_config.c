@@ -22,54 +22,26 @@
 enum { CTRL=1, SHIFT=2, ALT=4, SUPER=8, KEY_COUNT=512,
        BINDING_LIMIT=512, TEXT_LIMIT=1024, PATH_LIMIT=4096 };
 #define S(x) (1u << APP_##x)
-#define EDIT (S(NORMAL)|S(VISUAL)|S(INSERT)|S(COMMAND)|S(BROWSER)|S(INFO))
-#define NAV (EDIT|S(OUTPUT))
 typedef struct {
     const char *name;
     unsigned scopes;
-    int key, mods;
-    const char *characters, *command, *description;
+    const char *description;
 } Action;
-#define KEY_ACTION(n,sc,k,m) {n,sc,k,m,NULL,NULL,n}
-#define NORMAL_ACTION(n,c) {n,S(NORMAL),0,0,c,NULL,n}
-#define COMMAND_ACTION(n,c) {n,EDIT,0,0,NULL,c,n}
-#define WORKSPACE_ACTION(n,d) {n,S(WORKSPACE),0,0,NULL,NULL,d}
-#define WORLD_ACTION(n) {n,S(WORLD),0,0,NULL,NULL,n}
+#define WORKSPACE_ACTION(n,d) {n,S(WORKSPACE),d}
+#define WORLD_ACTION(n) {n,S(WORLD),n}
 static const Action actions[] = {
-    KEY_ACTION("left",NAV&~S(BROWSER),KEY_LEFT,0), KEY_ACTION("right",NAV&~S(BROWSER),KEY_RIGHT,0),
-    KEY_ACTION("up",NAV&~S(COMMAND),KEY_UP,0), KEY_ACTION("down",NAV&~S(COMMAND),KEY_DOWN,0),
-    KEY_ACTION("home",NAV,KEY_HOME,0), KEY_ACTION("end",NAV,KEY_END,0),
-    KEY_ACTION("page_up",NAV&~(S(INSERT)|S(COMMAND)),KEY_PAGE_UP,0), KEY_ACTION("page_down",NAV&~(S(INSERT)|S(COMMAND)),KEY_PAGE_DOWN,0),
-    KEY_ACTION("escape",EDIT,KEY_ESCAPE,0), KEY_ACTION("enter",S(INSERT)|S(COMMAND)|S(BROWSER),KEY_ENTER,0),
-    KEY_ACTION("backspace",S(INSERT)|S(COMMAND),KEY_BACKSPACE,0), KEY_ACTION("delete",S(NORMAL)|S(VISUAL)|S(INSERT)|S(COMMAND),KEY_DELETE,0),
-    KEY_ACTION("tab",S(INSERT),KEY_TAB,0), KEY_ACTION("paste",S(NORMAL)|S(INSERT)|S(COMMAND),KEY_V,CTRL),
-    KEY_ACTION("copy",S(VISUAL),KEY_C,CTRL), KEY_ACTION("cut",S(VISUAL),KEY_X,CTRL),
-    KEY_ACTION("back",S(NORMAL),KEY_O,CTRL), KEY_ACTION("definition_key",S(NORMAL),KEY_RIGHT_BRACKET,CTRL),
-    {"parent",S(BROWSER),KEY_H,0,NULL,NULL,"Parent directory"},
-    NORMAL_ACTION("insert","i"), NORMAL_ACTION("append","a"),
-    NORMAL_ACTION("insert_start","I"), NORMAL_ACTION("append_end","A"),
-    {"visual",S(NORMAL)|S(VISUAL),0,0,"v",NULL,"visual"}, {"visual_line",S(NORMAL)|S(VISUAL),0,0,"V",NULL,"visual_line"},
-    {"delete_operator",S(NORMAL)|S(VISUAL),0,0,"d",NULL,"delete_operator"}, {"copy_operator",S(NORMAL)|S(VISUAL),0,0,"y",NULL,"copy_operator"},
-    NORMAL_ACTION("goto_operator","g"), {"delete_to_end",S(NORMAL)|S(VISUAL),0,0,"D",NULL,"delete_to_end"},
-    NORMAL_ACTION("paste_after","p"), NORMAL_ACTION("paste_before","P"),
-    NORMAL_ACTION("delete_line","dd"), NORMAL_ACTION("copy_line","yy"),
-    {"command",S(NORMAL)|S(BROWSER),0,0,":",NULL,"enter command mode"},
-    COMMAND_ACTION("save","w"), COMMAND_ACTION("build","make"),
-    COMMAND_ACTION("run","run"), COMMAND_ACTION("model","model"),
-    COMMAND_ACTION("definition","definition"), COMMAND_ACTION("declaration","declaration"),
-    COMMAND_ACTION("hover","hover"), COMMAND_ACTION("explore","Ex"),
-    {"config",EDIT|S(WORKSPACE),0,0,NULL,"config","Open configuration"},
-    {"reload_config",EDIT|S(WORKSPACE),0,0,NULL,"reloadconfig","Reload configuration"},
-    WORKSPACE_ACTION("split_horizontal","Split mc-nvim left / right"),
-    WORKSPACE_ACTION("split_vertical","Split mc-nvim top / bottom"),
+    WORKSPACE_ACTION("split_horizontal","Split terminal left / right"),
+    WORKSPACE_ACTION("split_vertical","Split terminal top / bottom"),
     WORKSPACE_ACTION("focus_left","Focus left pane"), WORKSPACE_ACTION("focus_right","Focus right pane"),
     WORKSPACE_ACTION("focus_up","Focus upper pane"), WORKSPACE_ACTION("focus_down","Focus lower pane"),
     WORKSPACE_ACTION("resize_left","Move divider left"), WORKSPACE_ACTION("resize_right","Move divider right"),
     WORKSPACE_ACTION("resize_up","Move divider up"), WORKSPACE_ACTION("resize_down","Move divider down"),
-    WORKSPACE_ACTION("next_pane","Focus next pane"), WORKSPACE_ACTION("output","Open / focus mc-output"),
-    WORKSPACE_ACTION("zoom","Zoom / restore text panes"), WORKSPACE_ACTION("close_pane","Close focused pane"),
+    WORKSPACE_ACTION("next_pane","Focus next pane"), WORKSPACE_ACTION("terminal","Open terminal"),
+    WORKSPACE_ACTION("zoom","Zoom / restore terminal panes"), WORKSPACE_ACTION("close_pane","Close focused pane"),
     WORKSPACE_ACTION("world","Restore and focus mc-gui"), WORKSPACE_ACTION("help","Show key bindings"),
-    {"cancel",S(OUTPUT),KEY_C,CTRL,NULL,NULL,"Stop command"},
+    WORKSPACE_ACTION("config","Edit configuration in terminal"),
+    WORKSPACE_ACTION("reload_config","Reload configuration"),
+    WORKSPACE_ACTION("cancel_run","Cancel the active simulation driver"),
     WORLD_ACTION("forward"), WORLD_ACTION("backward"), WORLD_ACTION("left"), WORLD_ACTION("right"),
     WORLD_ACTION("up"), WORLD_ACTION("down"), WORLD_ACTION("inventory"), WORLD_ACTION("pause"),
     WORLD_ACTION("command"), WORLD_ACTION("look_left"), WORLD_ACTION("look_right"),
@@ -78,9 +50,7 @@ static const Action actions[] = {
     WORLD_ACTION("slot_4"), WORLD_ACTION("slot_5"), WORLD_ACTION("slot_6"),
     WORLD_ACTION("slot_7"), WORLD_ACTION("slot_8"), WORLD_ACTION("slot_9")
 };
-static const char *scope_names[] = {
-    "workspace","normal","visual","insert","command","browser","info","output","world"
-};
+static const char *scope_names[] = {"workspace","world"};
 typedef struct { int key, character, mods; bool leader; char text[64]; } Trigger;
 typedef struct { AppKeyScope scope; size_t action; Trigger trigger; int line, column; } Binding;
 typedef struct { AppSettings settings; Trigger leader; Binding bindings[BINDING_LIMIT]; size_t count; } Config;
@@ -88,9 +58,8 @@ static Config current;
 static char config_path[PATH_LIMIT], config_error[768];
 static bool ready;
 static unsigned revision;
-static bool reset_operator;
-typedef struct { bool pressed[KEY_COUNT], repeat[KEY_COUNT], down[KEY_COUNT]; int chars[TEXT_LIMIT], count, next, mods; const char *command; } Input;
-static Input physical, logical;
+typedef struct { bool pressed[KEY_COUNT], down[KEY_COUNT]; int chars[TEXT_LIMIT], count, next, mods; } Input;
+static Input physical;
 
 static bool fail(const char *format, ...)
 {
@@ -177,48 +146,9 @@ static bool add_binding(Config *config,AppKeyScope scope,const char *name,const 
 static void defaults(Config *config)
 {
     *config=(Config){.settings={.vsync=true,.fps_limit=60,.msaa_samples=4,.fov=65,
-        .editor_font_size=20,.output_font_size=20,.tab_width=4,.stream_radius=5,
+        .terminal_font_size=18,.stream_radius=5,
         .leader_timeout_ms=0,.mouse_sensitivity=0.003f,.move_speed=5.4f,.scroll_lines=3}};
     (void)parse_trigger("Ctrl+B",&config->leader);
-    static const struct { const char *action,*trigger; } nav[] = {
-        {"left","Left"},{"right","Right"},{"up","Up"},{"down","Down"},
-        {"home","Home"},{"end","End"},{"page_up","PageUp"},{"page_down","PageDown"}
-    };
-    for (int s=APP_NORMAL;s<=APP_OUTPUT;++s) {
-        for (size_t i=0;i<sizeof(nav)/sizeof(nav[0]);++i)
-            if (action_index((AppKeyScope)s,nav[i].action)>=0) (void)add_binding(config,(AppKeyScope)s,nav[i].action,nav[i].trigger);
-        if (s!=APP_OUTPUT) (void)add_binding(config,(AppKeyScope)s,"escape","Escape");
-    }
-    for (int s=APP_NORMAL;s<=APP_VISUAL;++s) {
-        static const struct { const char *action,*trigger; } normal[] = {
-            {"left","h"},{"right","l"},{"up","k"},{"down","j"},
-            {"insert","i"},{"append","a"},{"insert_start","I"},{"append_end","A"},
-            {"visual","v"},{"visual_line","V"},{"delete_operator","d"},{"copy_operator","y"},
-            {"goto_operator","g"},{"delete_to_end","D"},{"delete","x"},{"delete","Delete"},
-            {"paste_after","p"},{"paste_before","P"},{"command",":"},
-            {"back","Ctrl+O"},{"back","Ctrl+T"},{"definition_key","Ctrl+]"},
-            {"back","Super+O"},{"back","Super+T"},{"definition_key","Super+]"},
-            {"paste","Ctrl+V"},{"paste","Super+V"},{"copy","Ctrl+C"},{"copy","Super+C"},
-            {"cut","Ctrl+X"},{"cut","Super+X"},{"hover","K"}
-        };
-        for (size_t i=0;i<sizeof(normal)/sizeof(normal[0]);++i)
-            if (action_index((AppKeyScope)s,normal[i].action)>=0) (void)add_binding(config,(AppKeyScope)s,normal[i].action,normal[i].trigger);
-    }
-    for (int s=APP_INSERT;s<=APP_COMMAND;++s) {
-        (void)add_binding(config,(AppKeyScope)s,"enter","Enter");
-        (void)add_binding(config,(AppKeyScope)s,"backspace","Backspace");
-        (void)add_binding(config,(AppKeyScope)s,"delete","Delete");
-        (void)add_binding(config,(AppKeyScope)s,"paste","Ctrl+V");
-        (void)add_binding(config,(AppKeyScope)s,"paste","Super+V");
-    }
-    (void)add_binding(config,APP_INSERT,"tab","Tab");
-    (void)add_binding(config,APP_BROWSER,"up","k"); (void)add_binding(config,APP_BROWSER,"down","j");
-    (void)add_binding(config,APP_BROWSER,"enter","Enter"); (void)add_binding(config,APP_BROWSER,"enter","l");
-    (void)add_binding(config,APP_BROWSER,"parent","h");
-    (void)add_binding(config,APP_BROWSER,"command",":");
-    (void)add_binding(config,APP_INFO,"up","k"); (void)add_binding(config,APP_INFO,"down","j");
-    (void)add_binding(config,APP_OUTPUT,"up","k"); (void)add_binding(config,APP_OUTPUT,"down","j");
-    (void)add_binding(config,APP_OUTPUT,"cancel","Ctrl+C");
     static const struct { const char *action,*trigger; } workspace[] = {
         {"split_horizontal","Leader+%"},{"split_vertical","Leader+\""},
         {"focus_left","Leader+Left"},{"focus_right","Leader+Right"},
@@ -227,9 +157,9 @@ static void defaults(Config *config)
         {"resize_right","Leader+Ctrl+Right"},{"resize_right","Leader+L"},
         {"resize_up","Leader+Ctrl+Up"},{"resize_up","Leader+K"},
         {"resize_down","Leader+Ctrl+Down"},{"resize_down","Leader+J"},
-        {"next_pane","Leader+o"},{"output","Leader+c"},{"zoom","Leader+z"},
+        {"next_pane","Leader+o"},{"terminal","Leader+c"},{"zoom","Leader+z"},
         {"close_pane","Leader+x"},{"world","Leader+g"},{"help","Leader+?"},
-        {"config","Leader+,"},{"reload_config","Leader+r"}
+        {"config","Leader+,"},{"reload_config","Leader+r"},{"cancel_run","Leader+k"}
     };
     for (size_t i=0;i<sizeof(workspace)/sizeof(workspace[0]);++i) (void)add_binding(config,APP_WORKSPACE,workspace[i].action,workspace[i].trigger);
     static const struct { const char *action,*trigger; } world[] = {
@@ -310,10 +240,10 @@ static bool number(toml_datum_t root,const char *name,double low,double high,dou
 }
 static bool read_settings(Config *next,toml_datum_t root)
 {
-    if (!allowed_table(root,"config"," window  editor  output  input  world  workspace  keys ")) return false;
+    if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys ")) return false;
     static const struct { const char *table,*allowed; } fields[] = {
         {"window"," vsync  fps_limit  msaa_samples  fov "},
-        {"editor"," font_size  tab_width "},{"output"," font_size "},
+        {"editor"," font_size  tab_width "},{"output"," font_size "},{"terminal"," font_size  font "},
         {"input"," mouse_sensitivity  move_speed  scroll_lines "},
         {"world"," stream_radius "},{"workspace"," leader  leader_timeout_ms "}
     };
@@ -327,9 +257,13 @@ static bool read_settings(Config *next,toml_datum_t root)
     if (s->msaa_samples!=0 && s->msaa_samples!=2 && s->msaa_samples!=4 && s->msaa_samples!=8)
         return config_value_error("window.msaa_samples",toml_seek(root,"window.msaa_samples"),"use 0, 2, 4 or 8");
     FLOAT_FIELD("window.fov",fov,30,120);
-    INT_FIELD("editor.font_size",editor_font_size,10,48);
-    INT_FIELD("editor.tab_width",tab_width,1,16);
-    INT_FIELD("output.font_size",output_font_size,10,48);
+    INT_FIELD("terminal.font_size",terminal_font_size,10,48);
+    toml_datum_t font = toml_seek(root, "terminal.font");
+    if (font.type != TOML_UNKNOWN) {
+        if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_font)
+            return config_value_error("terminal.font", font, "expected a font path string");
+        memcpy(s->terminal_font, font.u.s, (size_t)font.u.str.len + 1);
+    }
     INT_FIELD("world.stream_radius",stream_radius,1,16);
     INT_FIELD("workspace.leader_timeout_ms",leader_timeout_ms,0,10000);
     FLOAT_FIELD("input.mouse_sensitivity",mouse_sensitivity,0.0001,0.1);
@@ -359,6 +293,7 @@ static bool read_bindings(Config *next,toml_datum_t root)
         for (int i=0;i<table.u.tab.size;++i) {
             const char *name=table.u.tab.key[i]; toml_datum_t value=table.u.tab.value[i];
             if ((size_t)table.u.tab.len[i]!=strlen(name)) return config_value_error(path,value,"action must not contain NUL characters");
+            if (scope==APP_WORKSPACE && !strcmp(name,"output")) name="terminal";
             int action=action_index((AppKeyScope)scope,name);
             if (action<0) return config_value_error(name,value,"unknown action in this scope");
             for (size_t j=0;j<next->count;)
@@ -452,7 +387,7 @@ bool app_config_ensure_file(void)
     if (!file) return errno==EEXIST || fail("cannot create %s: %s",config_path,strerror(errno));
     Config base; defaults(&base);
     fputs("# mcmux configuration. Missing settings keep built-in defaults.\n"
-        "# Save with :w, then use :reloadconfig. Errors keep the previous configuration.\n"
+        "# Save, then press the workspace leader followed by r to reload.\n"
         "# MCMUX_CONFIG may override this file with an absolute path.\n"
         "# Key values are strings or arrays; [] disables an action.\n"
         "# Each action replaces its default bindings only in the named scope.\n"
@@ -460,12 +395,11 @@ bool app_config_ensure_file(void)
         "# Modifiers: Ctrl, Shift, Alt/Opt, Super/Cmd. Named keys: Escape, Enter,\n"
         "# Tab, Space, arrows, Home, End, PageUp, PageDown, Backspace, Delete, F1..F12.\n"
         "# A single printable character uses the typed character (keyboard-layout aware).\n"
-        "# Example: [keys.normal] save = [\"Ctrl+S\"] ; run = [\"F5\"] (on separate lines).\n\n"
+        "\n"
         "[window]\nvsync = true\nfps_limit = 60 # 0..1000; 0 removes the frame cap\n"
         "msaa_samples = 4 # 0, 2, 4, 8; unsupported hardware uses single-sample rendering\n"
         "fov = 65.0 # 30..120 degrees\n\n"
-        "[editor]\nfont_size = 20 # 10..48\ntab_width = 4 # 1..16\n\n"
-        "[output]\nfont_size = 20 # 10..48\n\n"
+        "[terminal]\nfont_size = 18 # 10..48\n# font = \"/absolute/path/to/font.ttf\"\n\n"
         "[input]\nmouse_sensitivity = 0.003 # 0.0001..0.1 radians per pixel\n"
         "move_speed = 5.4 # 0.1..100 blocks per second\nscroll_lines = 3.0 # 0.1..20\n\n"
         "[world]\nstream_radius = 5 # 1..16 chunks; affects the loaded view, not circuit semantics\n\n"
@@ -527,17 +461,15 @@ void app_input_frame(void)
 {
     physical=(Input){0};
     for (int i=0;i<KEY_COUNT;++i) {
-        physical.pressed[i]=IsKeyPressed(i); physical.repeat[i]=IsKeyPressedRepeat(i); physical.down[i]=IsKeyDown(i);
+        physical.pressed[i]=IsKeyPressed(i); physical.down[i]=IsKeyDown(i);
     }
     if (physical.down[KEY_LEFT_CONTROL]||physical.down[KEY_RIGHT_CONTROL]) physical.mods|=CTRL;
     if (physical.down[KEY_LEFT_SHIFT]||physical.down[KEY_RIGHT_SHIFT]) physical.mods|=SHIFT;
     if (physical.down[KEY_LEFT_ALT]||physical.down[KEY_RIGHT_ALT]) physical.mods|=ALT;
     if (physical.down[KEY_LEFT_SUPER]||physical.down[KEY_RIGHT_SUPER]) physical.mods|=SUPER;
     int c; while ((c=GetCharPressed())!=0) if (physical.count<TEXT_LIMIT) physical.chars[physical.count++]=c;
-    logical=physical;
-    reset_operator=false;
 }
-static bool match(const Trigger *t,bool held,bool repeat)
+static bool match(const Trigger *t,bool held)
 {
     if (held) {
         int key=t->key;
@@ -545,18 +477,17 @@ static bool match(const Trigger *t,bool held,bool repeat)
         if (key<=0 || key>=KEY_COUNT || !physical.down[key]) return false;
         return (physical.mods&t->mods)==t->mods;
     }
-    if (t->key) return physical.mods==t->mods &&
-        (physical.pressed[t->key] || (repeat && physical.repeat[t->key]));
+    if (t->key) return physical.mods==t->mods && physical.pressed[t->key];
     if ((physical.mods&~SHIFT)!=t->mods) return false;
     for (int i=0;i<physical.count;++i) if (physical.chars[i]==t->character) return true;
     return false;
 }
-bool app_input_leader(void) { return match(&current.leader,false,false); }
+bool app_input_leader(void) { return match(&current.leader,false); }
 const char *app_input_workspace(bool after_leader)
 {
     for (size_t i=0;i<current.count;++i) {
         Binding *b=&current.bindings[i];
-        if (b->scope==APP_WORKSPACE && b->trigger.leader==after_leader && match(&b->trigger,false,false))
+        if (b->scope==APP_WORKSPACE && b->trigger.leader==after_leader && match(&b->trigger,false))
             return actions[b->action].name;
     }
     return NULL;
@@ -565,51 +496,12 @@ bool app_input_world(const char *name,bool held)
 {
     for (size_t i=0;i<current.count;++i) {
         Binding *b=&current.bindings[i];
-        if (b->scope==APP_WORLD && !strcmp(actions[b->action].name,name) && match(&b->trigger,held,false)) return true;
+        if (b->scope==APP_WORLD && !strcmp(actions[b->action].name,name) && match(&b->trigger,held)) return true;
     }
     return false;
 }
-static void emit_action(const Action *action,bool pressed,bool repeated,bool down)
+int app_input_char(void)
 {
-    if (pressed && action->characters && strlen(action->characters)>1) reset_operator=true;
-    if (action->key) {
-        logical.pressed[action->key]|=pressed; logical.repeat[action->key]|=repeated; logical.down[action->key]|=down;
-        if (action->mods&CTRL) logical.down[KEY_LEFT_CONTROL]=true;
-        if (action->mods&SHIFT) logical.down[KEY_LEFT_SHIFT]=true;
-        if (action->mods&ALT) logical.down[KEY_LEFT_ALT]=true;
-        if (action->mods&SUPER) logical.down[KEY_LEFT_SUPER]=true;
-    }
-    if (pressed && action->command) logical.command=action->command;
-    if (pressed && action->characters) for (const char *p=action->characters;*p;++p)
-        if (logical.count<TEXT_LIMIT) logical.chars[logical.count++]=(unsigned char)*p;
+    return physical.next < physical.count ? physical.chars[physical.next++] : 0;
 }
-void app_input_scope(AppKeyScope scope)
-{
-    logical=(Input){0};
-    bool key_mapped=false;
-    for (size_t i=0;i<current.count;++i) {
-        Binding *b=&current.bindings[i];
-        if (b->scope!=scope || !b->trigger.key || !match(&b->trigger,false,true)) continue;
-        emit_action(&actions[b->action],physical.pressed[b->trigger.key],physical.repeat[b->trigger.key],physical.down[b->trigger.key]);
-        key_mapped=true;
-    }
-    /* A named key/chord owns its text too (for example Space remapped to Enter). */
-    if (key_mapped) return;
-    for (int i=0;i<physical.count;++i) {
-        int c=physical.chars[i]; bool mapped=false;
-        for (size_t j=0;j<current.count;++j) {
-            Binding *b=&current.bindings[j];
-            if (b->scope!=scope || b->trigger.key || b->trigger.character!=c || (physical.mods&~SHIFT)!=b->trigger.mods) continue;
-            emit_action(&actions[b->action],true,false,true); mapped=true; break;
-        }
-        if (!mapped && (scope==APP_INSERT || scope==APP_COMMAND) && !(physical.mods&(CTRL|SUPER)) && logical.count<TEXT_LIMIT)
-            logical.chars[logical.count++]=c;
-    }
-}
-const char *app_input_command(void) { return logical.command; }
-bool app_input_resets_operator(void) { return reset_operator; }
-int app_input_char(void) { return logical.next<logical.count ? logical.chars[logical.next++] : 0; }
-bool app_input_pressed(int key) { return key>=0 && key<KEY_COUNT && logical.pressed[key]; }
-bool app_input_repeat(int key) { return key>=0 && key<KEY_COUNT && logical.repeat[key]; }
-bool app_input_down(int key) { return key>=0 && key<KEY_COUNT && logical.down[key]; }
-void app_input_discard(void) { logical.next=logical.count; }
+void app_input_discard(void) { physical.next = physical.count; }

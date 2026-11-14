@@ -21,6 +21,7 @@
 #define RAYLIB_DIR "third_party/raylib"
 #define RAYLIB_SRC RAYLIB_DIR "/src"
 #define TOML_DIR "third_party/tomlc17"
+#define VTERM_DIR "third_party/libvterm"
 #define RAYLIB_CONFIG "raylib_config.h"
 #define MAC_APP "build/macos/mcmux.app"
 #define MAC_APP_BINARY MAC_APP "/Contents/MacOS/machinecraft_gui"
@@ -87,9 +88,19 @@ static const char *gui_sources[] = {
     "src/frontend/gui_view.c",
     "src/frontend/ui_font.c",
     "src/frontend/workspace_layout.c",
-    "src/frontend/workspace_editor.c",
-    "src/frontend/workspace_code.c",
-    "src/frontend/workspace_output.c",
+    "src/frontend/workspace_terminal.c",
+    "src/frontend/workspace_driver.c",
+#if defined(__linux__) || defined(__APPLE__)
+    VTERM_DIR "/src/encoding.c",
+    VTERM_DIR "/src/keyboard.c",
+    VTERM_DIR "/src/mouse.c",
+    VTERM_DIR "/src/parser.c",
+    VTERM_DIR "/src/pen.c",
+    VTERM_DIR "/src/screen.c",
+    VTERM_DIR "/src/state.c",
+    VTERM_DIR "/src/unicode.c",
+    VTERM_DIR "/src/vterm.c",
+#endif
     "src/frontend/world_session_manager.c",
     "src/frontend/block_renderer.c",
     "src/frontend/world_renderer.c",
@@ -492,7 +503,7 @@ static bool collect_vendor_files(Files *files)
 static bool collect_header(Nob_Walk_Entry entry)
 {
     Files *headers = entry.data;
-    if (entry.type == NOB_FILE_REGULAR && ends_with(entry.path, ".h")) {
+    if (entry.type == NOB_FILE_REGULAR && (ends_with(entry.path, ".h") || ends_with(entry.path, ".inc"))) {
         files_add(headers, entry.path);
     }
     return true;
@@ -502,6 +513,7 @@ static bool collect_project_headers(Files *headers)
 {
     if (!nob_walk_dir("include", collect_header, .data = headers)) return false;
     if (!nob_walk_dir("src", collect_header, .data = headers)) return false;
+    if (!nob_walk_dir(VTERM_DIR, collect_header, .data = headers)) return false;
     files_add(headers, "nob.c");
     files_add(headers, RAYLIB_CONFIG);
     files_add(headers, TOML_DIR "/tomlc17.h");
@@ -548,8 +560,11 @@ static bool compile_project_source(const char *source, const Files *headers,
         Nob_Cmd command = {0};
         nob_cmd_append(&command,
             compiler(), "-std=c11", "-O2", "-Wall", "-Wextra",
-            "-Iinclude", "-Isrc", "-I" RAYLIB_SRC,
+            "-Iinclude", "-Isrc", "-I" RAYLIB_SRC, "-I" VTERM_DIR "/include",
             "-c", source, "-o", output);
+        if (strncmp(source, VTERM_DIR "/", sizeof(VTERM_DIR)) == 0)
+            nob_cmd_append(&command, "-Wno-unused-parameter", "-Wno-missing-field-initializers",
+                "-Wno-implicit-fallthrough", "-Wno-sign-compare", "-Wno-unused-but-set-variable");
         if (!nob_cmd_run(&command)) return false;
     }
 
@@ -611,7 +626,7 @@ static bool link_target(const char *output, const Files *objects)
     nob_cmd_append(&command,
         "-lopengl32", "-lgdi32", "-lwinmm", "-lshell32");
 #elif defined(__linux__)
-    nob_cmd_append(&command, "-lGL", "-lX11", "-lm", "-pthread", "-ldl");
+    nob_cmd_append(&command, "-lGL", "-lX11", "-lm", "-pthread", "-ldl", "-lutil");
 #endif
 
     return nob_cmd_run(&command);
