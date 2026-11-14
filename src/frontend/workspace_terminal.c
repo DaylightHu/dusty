@@ -674,8 +674,6 @@ void workspace_terminal_draw(WorkspaceTerminal *terminal, Rectangle box, bool fo
         }
         EndScissorMode();
     }
-    DrawRectangleLinesEx(box, 1, (Color){69,71,90,255});
-    if (focused) DrawRectangle((int)box.x, (int)box.y, (int)box.width, 1, (Color){137,220,235,255});
 }
 
 static VTermModifier modifiers(void)

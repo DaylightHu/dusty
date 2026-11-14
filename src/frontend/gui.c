@@ -2469,6 +2469,13 @@ static void draw_pane_help(GuiApp *app)
     EndScissorMode();
 }
 
+static void draw_workspace_border(Rectangle box, bool focused)
+{
+    if (box.width <= 0 || box.height <= 0) return;
+    Color border = focused ? (Color){180, 160, 222, 255} : (Color){69, 71, 90, 255};
+    DrawRectangleLinesEx(box, focused ? 2.0f : 1.0f, border);
+}
+
 static void draw_workspace(GuiApp *app, VoxelHit hit)
 {
     WorkspaceGeometry geometry;
@@ -2506,8 +2513,6 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
         DrawTexturePro(app->gui_target.texture,
             (Rectangle){0, 0, (float)app->gui_target.texture.width, -(float)app->gui_target.texture.height},
             box, (Vector2){0}, 0, WHITE);
-        Color accent = app->workspace.focus == 0 ? (Color){172, 143, 255, 255} : (Color){118, 130, 143, 255};
-        DrawRectangleLinesEx(box, app->workspace.focus == 0 ? 2 : 1, accent);
         if (app->transparent_framebuffer) EndBlendMode();
     }
     gui_view_reset();
@@ -2517,6 +2522,16 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
         if (geometry.visible[i] && app->terminals[i])
             workspace_terminal_draw(app->terminals[i], pane_rectangle(geometry.panes[i]),
                 app->workspace.focus == i + 1, background_opacity);
+    }
+    /* Frame every pane after its content, with one shared focus style. Opaque
+     * strokes also keep their color when terminal backgrounds are transparent. */
+    bool focused = IsWindowFocused() && !app->pane_help;
+    if (app->workspace.gui_visible)
+        draw_workspace_border(pane_rectangle(geometry.gui), focused && app->workspace.focus == 0);
+    for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
+        if (geometry.visible[i] && app->terminals[i])
+            draw_workspace_border(pane_rectangle(geometry.panes[i]),
+                focused && app->workspace.focus == i + 1);
     }
     int y = GetScreenHeight() - WORKSPACE_STATUS_HEIGHT;
     const char *state = app->program_active ? "DRIVER RUNNING" :
