@@ -22,6 +22,10 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "rlgl.h"
+#if defined(__linux__) || defined(__APPLE__)
+#define GLFW_INCLUDE_NONE
+#include "../../third_party/raylib/src/external/glfw/include/GLFW/glfw3.h"
+#endif
 #include "rs/session.h"
 
 #include <ctype.h>
@@ -127,7 +131,7 @@ typedef struct {
     RenderTexture2D gui_target;
     WorldMsaa world_msaa;
     Texture2D title_background;
-    bool pane_prefix, pane_help;
+    bool pane_prefix, pane_help, transparent_framebuffer;
     double prefix_deadline;
     unsigned config_revision;
     int help_scroll;
@@ -1866,6 +1870,10 @@ static bool initialize(GuiApp *app, WorldSessionManager *world_sessions)
     const AppSettings *settings=app_config_current();
     unsigned int window_flags = FLAG_WINDOW_RESIZABLE;
     if (settings->vsync) window_flags |= FLAG_VSYNC_HINT;
+#if defined(__linux__) || defined(__APPLE__)
+    if (settings->terminal_background_opacity < 1.0f)
+        window_flags |= FLAG_WINDOW_TRANSPARENT;
+#endif
 #if defined(__APPLE__)
     window_flags |= FLAG_WINDOW_HIGHDPI;
 #endif
@@ -1883,6 +1891,14 @@ static bool initialize(GuiApp *app, WorldSessionManager *world_sessions)
         UnloadImage(icon);
     } else {
         TraceLog(LOG_WARNING, "Cannot load mcmux window icon");
+    }
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+    if (window_flags & FLAG_WINDOW_TRANSPARENT) {
+        app->transparent_framebuffer = glfwGetWindowAttrib(glfwGetCurrentContext(),
+            GLFW_TRANSPARENT_FRAMEBUFFER) == GLFW_TRUE;
+        if (!app->transparent_framebuffer)
+            TraceLog(LOG_WARNING, "Terminal background transparency requires desktop compositing");
     }
 #endif
     SetWindowMinSize(1000, 650);
@@ -2278,8 +2294,11 @@ static bool update_workspace_pointer(GuiApp *app)
 
 static void reload_user_config(GuiApp *app)
 {
-    if (app_config_reload()) pane_notice(app, "Configuration reloaded from disk");
-    else pane_notice(app, app_config_error());
+    if (!app_config_reload()) pane_notice(app, app_config_error());
+    else if (app_config_current()->terminal_background_opacity < 1.0f &&
+             !app->transparent_framebuffer)
+        pane_notice(app, "Configuration reloaded. Terminal transparency needs a restart with desktop compositing.");
+    else pane_notice(app, "Configuration reloaded from disk");
 }
 
 static void open_user_config(GuiApp *app)
@@ -2478,17 +2497,26 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
         }
         EndTextureMode();
         Rectangle box = pane_rectangle(geometry.gui);
+        // Composite the world UI over the opaque workspace without reducing its alpha.
+        if (app->transparent_framebuffer) {
+            rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA,
+                                      RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
+            BeginBlendMode(BLEND_CUSTOM_SEPARATE);
+        }
         DrawTexturePro(app->gui_target.texture,
             (Rectangle){0, 0, (float)app->gui_target.texture.width, -(float)app->gui_target.texture.height},
             box, (Vector2){0}, 0, WHITE);
         Color accent = app->workspace.focus == 0 ? (Color){172, 143, 255, 255} : (Color){118, 130, 143, 255};
         DrawRectangleLinesEx(box, app->workspace.focus == 0 ? 2 : 1, accent);
+        if (app->transparent_framebuffer) EndBlendMode();
     }
     gui_view_reset();
+    float background_opacity = app->transparent_framebuffer
+        ? app_config_current()->terminal_background_opacity : 1.0f;
     for (int i = 0; i < WORKSPACE_TEXT_LIMIT; ++i) {
         if (geometry.visible[i] && app->terminals[i])
             workspace_terminal_draw(app->terminals[i], pane_rectangle(geometry.panes[i]),
-                app->workspace.focus == i + 1);
+                app->workspace.focus == i + 1, background_opacity);
     }
     int y = GetScreenHeight() - WORKSPACE_STATUS_HEIGHT;
     const char *state = app->program_active ? "DRIVER RUNNING" :
@@ -2499,6 +2527,11 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
         sim_is_frozen(game_session_world(app->session)) ? "FROZEN" : "RUNNING";
     const char *message = geometry.compact ? "Text area too small: showing one pane; enlarge window to restore layout" : app->pane_message;
     bool show_status = state[0] || geometry.compact || app->pane_message[0];
+    if (app->transparent_framebuffer && (show_status || app->pane_help)) {
+        rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA,
+                                  RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD, RL_FUNC_ADD);
+        BeginBlendMode(BLEND_CUSTOM_SEPARATE);
+    }
     if (show_status) {
         DrawRectangle(0, y, GetScreenWidth(), WORKSPACE_STATUS_HEIGHT, (Color){37, 28, 57, 255});
         BeginScissorMode(0, y, GetScreenWidth(), WORKSPACE_STATUS_HEIGHT);
@@ -2507,6 +2540,7 @@ static void draw_workspace(GuiApp *app, VoxelHit hit)
         EndScissorMode();
     }
     if (app->pane_help) draw_pane_help(app);
+    if (app->transparent_framebuffer && (show_status || app->pane_help)) EndBlendMode();
 }
 
 int gui_run(WorldSessionManager *world_sessions)

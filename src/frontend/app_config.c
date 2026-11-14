@@ -146,7 +146,7 @@ static bool add_binding(Config *config,AppKeyScope scope,const char *name,const 
 static void defaults(Config *config)
 {
     *config=(Config){.settings={.vsync=true,.fps_limit=60,.msaa_samples=4,.fov=65,
-        .terminal_font_size=18,.stream_radius=5,
+        .terminal_font_size=18,.terminal_background_opacity=1.0f,.stream_radius=5,
         .leader_timeout_ms=0,.mouse_sensitivity=0.003f,.move_speed=5.4f,.scroll_lines=3}};
     (void)parse_trigger("Ctrl+B",&config->leader);
     static const struct { const char *action,*trigger; } workspace[] = {
@@ -243,7 +243,7 @@ static bool read_settings(Config *next,toml_datum_t root)
     if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys ")) return false;
     static const struct { const char *table,*allowed; } fields[] = {
         {"window"," vsync  fps_limit  msaa_samples  fov "},
-        {"editor"," font_size  tab_width "},{"output"," font_size "},{"terminal"," font_size  font "},
+        {"editor"," font_size  tab_width "},{"output"," font_size "},{"terminal"," font_size  font  background_opacity "},
         {"input"," mouse_sensitivity  move_speed  scroll_lines "},
         {"world"," stream_radius "},{"workspace"," leader  leader_timeout_ms "}
     };
@@ -258,6 +258,7 @@ static bool read_settings(Config *next,toml_datum_t root)
         return config_value_error("window.msaa_samples",toml_seek(root,"window.msaa_samples"),"use 0, 2, 4 or 8");
     FLOAT_FIELD("window.fov",fov,30,120);
     INT_FIELD("terminal.font_size",terminal_font_size,10,48);
+    FLOAT_FIELD("terminal.background_opacity",terminal_background_opacity,0,1);
     toml_datum_t font = toml_seek(root, "terminal.font");
     if (font.type != TOML_UNKNOWN) {
         if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_font)
@@ -404,7 +405,8 @@ bool app_config_ensure_file(void)
         "[window]\nvsync = true\nfps_limit = 60 # 0..1000; 0 removes the frame cap\n"
         "msaa_samples = 4 # 0, 2, 4, 8; unsupported hardware uses single-sample rendering\n"
         "fov = 65.0 # 30..120 degrees\n\n"
-        "[terminal]\nfont_size = 18 # 10..48\n# font = \"/absolute/path/to/font.ttf\"\n\n"
+        "[terminal]\nfont_size = 18 # 10..48\n# font = \"/absolute/path/to/font.ttf\"\n"
+        "# background_opacity = 0.6 # default 1.0; requires desktop compositing\n\n"
         "[input]\nmouse_sensitivity = 0.003 # 0.0001..0.1 radians per pixel\n"
         "move_speed = 5.4 # 0.1..100 blocks per second\nscroll_lines = 3.0 # 0.1..20\n\n"
         "[world]\nstream_radius = 5 # 1..16 chunks; affects the loaded view, not circuit semantics\n\n"

@@ -58,6 +58,11 @@ it into the focused terminal.
 Set `[terminal].font_size` and optionally `[terminal].font` in
 `config.toml`. The font setting accepts a path to a monospace TTF.
 
+Set `[terminal].background_opacity` from `0.0` (transparent) to `1.0`
+(opaque, the default). This applies to the default terminal background.
+Restart mcmux when enabling transparency for the first time. A desktop
+compositor is required.
+
 ### C drivers
 
 | Terminal pane | Neovim | Purpose |
