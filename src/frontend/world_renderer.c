@@ -12,7 +12,7 @@
 enum { REGION_SIZE = 16 };
 enum {
     SOLIDS, IRON, GLASS, DUST, REPEATERS, COMPARATORS,
-    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, PARTS
+    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, TRANSLUCENT, PARTS
 };
 
 typedef struct {
@@ -59,12 +59,13 @@ static int part_for(unsigned id)
     case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
     case BLOCK_YELLOW_CONCRETE:
     case BLOCK_PISTON: case BLOCK_STICKY_PISTON: case BLOCK_BARREL:
-    case BLOCK_SLIME: case BLOCK_NOTE_BLOCK: case BLOCK_HONEY:
+    case BLOCK_NOTE_BLOCK:
     case BLOCK_TARGET: case BLOCK_HOPPER: case BLOCK_DROPPER:
     case BLOCK_REDSTONE_LAMP:
     case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD:
         return SOLIDS;
     case BLOCK_GLASS: return GLASS;
+    case BLOCK_SLIME: case BLOCK_HONEY: return TRANSLUCENT;
     case BLOCK_REDSTONE_WIRE: return DUST;
     case BLOCK_REDSTONE_REPEATER: return REPEATERS;
     case BLOCK_REDSTONE_COMPARATOR: return COMPARATORS;
@@ -81,10 +82,16 @@ static bool solid_part(int kind)
     return kind == SOLIDS || kind == IRON;
 }
 
+static bool cube_part(int kind)
+{
+    return solid_part(kind) || kind == GLASS || kind == TRANSLUCENT;
+}
+
 static void dirty_solid_parts(RenderRegion *region)
 {
     region->parts[SOLIDS].dirty = true;
     region->parts[IRON].dirty = true;
+    region->parts[TRANSLUCENT].dirty = true;
 }
 
 static bool state_solid(BlockState state)
@@ -137,17 +144,20 @@ static void on_change(void *context, BlockPos p, BlockState before, BlockState a
     /* New sections are discovered during sync, even if no cache exists yet. */
     bool solid_changed = state_solid(before) != state_solid(after);
     bool cube_changed = state_cube(before) != state_cube(after);
-    if (solid_changed || cube_changed) {
+    bool translucent_changed = before.id != after.id &&
+        (old_part == TRANSLUCENT || new_part == TRANSLUCENT);
+    if (solid_changed || cube_changed || translucent_changed) {
         for (Direction face = 0; face < DIR_COUNT; ++face) {
             RenderRegion *neighbor = find_region(r,block_offset(p,face));
             if (!neighbor) continue;
             if (solid_changed) dirty_solid_parts(neighbor);
             if (cube_changed) neighbor->parts[GLASS].dirty = true;
+            if (translucent_changed) neighbor->parts[TRANSLUCENT].dirty = true;
         }
     }
     if (!region) return;
     RenderCell *cell = &region->cells[index];
-    bool geometry = old_part != new_part;
+    bool geometry = old_part != new_part || translucent_changed;
     bool visual = before.id != after.id;
     if (old_part == new_part && new_part == DUST) {
         geometry = wire_sides(before) != wire_sides(after);
@@ -244,6 +254,22 @@ static unsigned visible_glass_faces(const WorldRenderer *r, BlockPos p)
     return mask;
 }
 
+static unsigned visible_translucent_faces(const WorldRenderer *r, BlockPos p,
+                                          BlockId id)
+{
+    static const BlockPos offsets[] = {
+        {0,0,1}, {0,0,-1}, {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}
+    };
+    unsigned mask = 0;
+    for (int face = 0; face < 6; ++face) {
+        BlockPos n = {p.x+offsets[face].x, p.y+offsets[face].y,
+                      p.z+offsets[face].z};
+        if (!solid_at(r,n) && world_get(r->world,n).id != id)
+            mask |= 1u << face;
+    }
+    return mask;
+}
+
 static unsigned bit_count(unsigned bits)
 {
     unsigned count = 0;
@@ -264,9 +290,11 @@ static bool rebuild_part(WorldRenderer *r, size_t region_id, int kind)
         BlockPos p = {x,y,z};
         RenderCell *cell = &region->cells[section_index(p)];
         if (part_for(cell->state.id) != kind) continue;
-        if (solid_part(kind) || kind == GLASS) {
-            cell->solid_faces = (uint8_t)(kind == GLASS ? visible_glass_faces(r,p) :
-                                                           visible_faces(r,p));
+        if (cube_part(kind)) {
+            cell->solid_faces = (uint8_t)(
+                kind == GLASS ? visible_glass_faces(r,p) :
+                kind == TRANSLUCENT ? visible_translucent_faces(r,p,(BlockId)cell->state.id) :
+                visible_faces(r,p));
             quads += cell->state.id == BLOCK_HOPPER ? HOPPER_QUAD_COUNT :
                      (int)bit_count(cell->solid_faces);
             if (block_is_piston_head((BlockId)cell->state.id)) quads += 4;
@@ -329,8 +357,10 @@ static bool rebuild_part(WorldRenderer *r, size_t region_id, int kind)
         }
         /* Positions stay on the GPU. Keep UVs for local/coalesced updates and
          * keep the index pointer required by raylib's indexed draw path. */
-        MemFree(mesh.vertices);
-        mesh.vertices = NULL;
+        if (kind != TRANSLUCENT) {
+            MemFree(mesh.vertices);
+            mesh.vertices = NULL;
+        }
     }
     UnloadMesh(part->mesh);
     part->mesh = mesh;
@@ -412,13 +442,14 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
         blocks->atlas, blocks->iron_texture, blocks->glass_texture, blocks->wire_atlas,
         blocks->repeater_atlas, blocks->comparator_atlas,
         blocks->powered_rail_atlas, blocks->activator_rail_atlas,
-        blocks->torch_atlas, blocks->lever_atlas
+        blocks->torch_atlas, blocks->lever_atlas, blocks->atlas
     };
     for (int kind = 0; kind < PARTS; ++kind) {
         r->materials[kind] = LoadMaterialDefault();
         if (!r->materials[kind].maps) { world_renderer_destroy(r); return NULL; }
         r->materials[kind].maps[MATERIAL_MAP_DIFFUSE].texture = textures[kind];
-        if (!solid_part(kind)) r->materials[kind].shader = blocks->cutout_shader;
+        if (!solid_part(kind) && kind != TRANSLUCENT)
+            r->materials[kind].shader = blocks->cutout_shader;
     }
     world_set_change_observer(world,on_change,r);
     return r;
@@ -485,12 +516,89 @@ bool world_renderer_sync(WorldRenderer *r)
     return true;
 }
 
-void world_renderer_draw(WorldRenderer *r)
+typedef struct {
+    const Mesh *mesh;
+    uint32_t first;
+    int stride;
+    float distance_squared;
+} TranslucentFace;
+
+static int compare_translucent_faces(const void *left, const void *right)
+{
+    const TranslucentFace *a = left, *b = right;
+    if (a->distance_squared < b->distance_squared) return 1;
+    if (a->distance_squared > b->distance_squared) return -1;
+    return 0;
+}
+
+static void draw_translucent_faces(WorldRenderer *r, Vector3 camera_position)
+{
+    size_t count = 0;
+    for (size_t i = 0; i < r->region_count; ++i) {
+        RegionPart *part = &r->regions[i]->parts[TRANSLUCENT];
+        if (part->mesh.vertexCount) {
+            size_t quads = (size_t)part->mesh.vertexCount/part->vertices_per_quad;
+            if (quads > SIZE_MAX - count) return;
+            count += quads;
+        }
+    }
+    if (!count || count > SIZE_MAX/sizeof(TranslucentFace)) return;
+    TranslucentFace *faces = malloc(count*sizeof(*faces));
+    if (!faces) return;
+    size_t next = 0;
+    for (size_t i = 0; i < r->region_count; ++i) {
+        RegionPart *part = &r->regions[i]->parts[TRANSLUCENT];
+        const Mesh *mesh = &part->mesh;
+        int stride = part->vertices_per_quad;
+        for (int first = 0; first < mesh->vertexCount; first += stride) {
+            /* Opposite corners give the face center for depth sorting. */
+            const float *a = mesh->vertices + first*3;
+            const float *b = mesh->vertices + (first+2)*3;
+            float dx = (a[0]+b[0])*0.5f-camera_position.x;
+            float dy = (a[1]+b[1])*0.5f-camera_position.y;
+            float dz = (a[2]+b[2])*0.5f-camera_position.z;
+            faces[next++] = (TranslucentFace){mesh, (uint32_t)first, stride,
+                                               dx*dx+dy*dy+dz*dz};
+        }
+    }
+    qsort(faces, count, sizeof(*faces), compare_translucent_faces);
+
+    /* Opaque and cutout geometry already populated the depth buffer. Blend
+     * translucent faces behind one another without hiding later faces. */
+    rlDrawRenderBatchActive();
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    rlDisableDepthMask();
+    rlDisableBackfaceCulling();
+    rlSetTexture(r->blocks->atlas.id);
+    for (size_t i = 0; i < count; ++i) {
+        const TranslucentFace *face = &faces[i];
+        rlCheckRenderBatchLimit(4);
+        rlBegin(RL_QUADS);
+        rlColor4ub(255, 255, 255, 255);
+        for (int v = 0; v < 4; ++v) {
+            int index = (int)face->first +
+                        (face->stride == 6 && v == 3 ? 5 : v);
+            const float *vertex = face->mesh->vertices + index*3;
+            const float *uv = face->mesh->texcoords + index*2;
+            rlTexCoord2f(uv[0], uv[1]);
+            rlVertex3f(vertex[0], vertex[1], vertex[2]);
+        }
+        rlEnd();
+    }
+    rlSetTexture(0);
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
+    rlEnableDepthMask();
+    free(faces);
+}
+
+void world_renderer_draw(WorldRenderer *r, Vector3 camera_position)
 {
     if (!r) return;
     rlDrawRenderBatchActive();
     Matrix identity = MatrixIdentity();
     for (int kind = 0; kind < PARTS; ++kind) {
+        if (kind == TRANSLUCENT) continue;
         /* Dust and redstone gates are surface quads; keep their reverse sides
          * visible to a noclip camera and through transparent glass. */
         bool two_sided = kind == DUST || kind == REPEATERS ||
@@ -504,4 +612,5 @@ void world_renderer_draw(WorldRenderer *r)
         }
         if (two_sided) rlEnableBackfaceCulling();
     }
+    draw_translucent_faces(r, camera_position);
 }
