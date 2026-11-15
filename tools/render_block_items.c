@@ -432,6 +432,24 @@ static bool render_item(const ItemSpec *item, const char *output_directory)
 int main(int argc, char **argv)
 {
     static const ItemSpec items[] = {
+        {"res/textures/block/white_concrete.png",
+         "res/textures/block/white_concrete.png",
+         "res/textures/block/white_concrete.png", "white_concrete.png", 0, 0, 0},
+        {"res/textures/block/blue_concrete.png",
+         "res/textures/block/blue_concrete.png",
+         "res/textures/block/blue_concrete.png", "blue_concrete.png", 0, 0, 0},
+        {"res/textures/block/gray_concrete.png",
+         "res/textures/block/gray_concrete.png",
+         "res/textures/block/gray_concrete.png", "gray_concrete.png", 0, 0, 0},
+        {"res/textures/block/green_concrete.png",
+         "res/textures/block/green_concrete.png",
+         "res/textures/block/green_concrete.png", "green_concrete.png", 0, 0, 0},
+        {"res/textures/block/purple_concrete.png",
+         "res/textures/block/purple_concrete.png",
+         "res/textures/block/purple_concrete.png", "purple_concrete.png", 0, 0, 0},
+        {"res/textures/block/yellow_concrete.png",
+         "res/textures/block/yellow_concrete.png",
+         "res/textures/block/yellow_concrete.png", "yellow_concrete.png", 0, 0, 0},
         {
             "res/textures/block/slime_block.png",
             "res/textures/block/slime_block.png",

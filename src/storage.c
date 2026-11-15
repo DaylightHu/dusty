@@ -42,10 +42,12 @@ enum {
     STATE_MOVING_PISTON_COUNT = DIR_COUNT * 2,
     STATE_LEVER_FIRST =
         STATE_MOVING_PISTON_FIRST + STATE_MOVING_PISTON_COUNT,
-    STATE_LEVER_COUNT = 3 * 4 * 2
+    STATE_LEVER_COUNT = 3 * 4 * 2,
+    STATE_CONCRETE_FIRST = STATE_LEVER_FIRST + STATE_LEVER_COUNT,
+    STATE_CONCRETE_COUNT = 5
 };
 
-_Static_assert(STATE_LEVER_FIRST + STATE_LEVER_COUNT <=
+_Static_assert(STATE_CONCRETE_FIRST + STATE_CONCRETE_COUNT <=
                STATE_ID_LIMIT,
                "block states must fit the palette state id");
 
@@ -87,6 +89,10 @@ bool state_encode(BlockState s, StateId *id)
     if (s.id == BLOCK_GLASS) { *id = STATE_GLASS; return true; }
     if (s.id == BLOCK_HONEY) { *id = STATE_HONEY; return true; }
     if (s.id == BLOCK_SLIME) { *id = STATE_SLIME; return true; }
+    if (s.id >= BLOCK_BLUE_CONCRETE && s.id <= BLOCK_YELLOW_CONCRETE) {
+        *id = (StateId)(STATE_CONCRETE_FIRST + s.id - BLOCK_BLUE_CONCRETE);
+        return true;
+    }
     if (s.id == BLOCK_REDSTONE_TORCH) {
         unsigned face = s.data.torch.support_dir;
         if (face == DIR_DOWN) face = 4;
@@ -232,6 +238,11 @@ bool state_decode(StateId id, BlockState *s)
     if (id == STATE_GLASS) { *s = block_default(BLOCK_GLASS); return true; }
     if (id == STATE_HONEY) { *s = block_default(BLOCK_HONEY); return true; }
     if (id == STATE_SLIME) { *s = block_default(BLOCK_SLIME); return true; }
+    if (id >= STATE_CONCRETE_FIRST &&
+        id < STATE_CONCRETE_FIRST + STATE_CONCRETE_COUNT) {
+        *s = block_default((BlockId)(BLOCK_BLUE_CONCRETE + id - STATE_CONCRETE_FIRST));
+        return true;
+    }
     if (id >= STATE_REPEATER_FIRST &&
         id < STATE_REPEATER_FIRST + STATE_REPEATER_COUNT) {
         unsigned value = id - STATE_REPEATER_FIRST;

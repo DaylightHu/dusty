@@ -12,5 +12,5 @@ WorldRenderer *world_renderer_create(World *world,
                                      const BlockRenderer *blocks);
 void world_renderer_destroy(WorldRenderer *renderer);
 bool world_renderer_sync(WorldRenderer *renderer);
-void world_renderer_draw(WorldRenderer *renderer);
+void world_renderer_draw(WorldRenderer *renderer, Vector3 camera_position);
 #endif

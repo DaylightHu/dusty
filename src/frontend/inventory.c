@@ -30,7 +30,12 @@ typedef struct {
 } InventoryLayout;
 
 static const BlockTexture block_textures[] = {
-    {BLOCK_IRON, "res/textures/item/iron_block.png"},
+    {BLOCK_IRON, "res/textures/item/white_concrete.png"},
+    {BLOCK_BLUE_CONCRETE, "res/textures/item/blue_concrete.png"},
+    {BLOCK_GRAY_CONCRETE, "res/textures/item/gray_concrete.png"},
+    {BLOCK_GREEN_CONCRETE, "res/textures/item/green_concrete.png"},
+    {BLOCK_PURPLE_CONCRETE, "res/textures/item/purple_concrete.png"},
+    {BLOCK_YELLOW_CONCRETE, "res/textures/item/yellow_concrete.png"},
     {BLOCK_GLASS, "res/textures/item/glass.png"},
     {BLOCK_REDSTONE_BLOCK, "res/textures/item/redstone_block.png"},
     {BLOCK_REDSTONE_WIRE, "res/textures/item/redstone_wire.png"},

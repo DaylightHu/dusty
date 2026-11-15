@@ -1,7 +1,7 @@
 #include "block_internal.h"
 
 const BlockDef rs_iron_def = {
-    .name = "iron",
+    .name = "white_concrete",
     .full_cube = true,
     .conductor = true,
     .supports_wire = true,

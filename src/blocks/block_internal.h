@@ -33,6 +33,9 @@ const BlockDef *block_definition(BlockId id);
 uint8_t block_state_signal(BlockState state, Direction face, SignalMode mode,
                            bool direct);
 extern const BlockDef rs_iron_def, rs_redstone_block_def, rs_wire_def, rs_torch_def,
+                      rs_blue_concrete_def, rs_gray_concrete_def,
+                      rs_green_concrete_def, rs_purple_concrete_def,
+                      rs_yellow_concrete_def,
                       rs_glass_def, rs_repeater_def, rs_comparator_def,
                       rs_powered_rail_def, rs_activator_rail_def,
                       rs_observer_def, rs_piston_def, rs_sticky_piston_def,
