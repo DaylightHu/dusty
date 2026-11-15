@@ -264,15 +264,15 @@ void inventory_draw(const Inventory *inventory, InventorySlot selected)
 
     DrawRectangle(0, 0, gui_view_width(), gui_view_height(),
                   (Color){10, 18, 20, 155});
-    DrawRectangleRec(layout.panel, (Color){226, 218, 196, 250});
-    DrawRectangleLinesEx(layout.panel, 3.0f, (Color){34, 63, 66, 255});
+    DrawRectangleRec(layout.panel, (Color){43, 43, 46, 255});
+    DrawRectangleLinesEx(layout.panel, 3.0f, (Color){84, 84, 91, 255});
 
     const char *title = "INVENTORY";
     int title_size = 25;
     ui_text_draw(title,
              (int)(layout.panel.x +
                    (layout.panel.width - ui_text_width(title, title_size))*0.5f),
-             (int)layout.panel.y + 17, title_size, (Color){26, 50, 55, 255});
+             (int)layout.panel.y + 17, title_size, RAYWHITE);
 
     for (int index = 0; index < INVENTORY_SLOT_COUNT; ++index) {
         Rectangle slot = inventory_slot_rectangle(layout, index);
@@ -306,6 +306,6 @@ void inventory_draw(const Inventory *inventory, InventorySlot selected)
         ui_text_draw(label,
                  (int)(layout.panel.x +
                        (layout.panel.width - ui_text_width(label, label_size))*0.5f),
-                 label_y, label_size, (Color){26, 50, 55, 255});
+                 label_y, label_size, RAYWHITE);
     }
 }
