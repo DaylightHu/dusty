@@ -31,7 +31,8 @@ enum {
     DROPPER_SIDE1_TILE = DROPPER_SIDE0_TILE + 1,
     LAMP_OFF_TILE = DROPPER_SIDE1_TILE + 1,
     LAMP_ON_TILE = LAMP_OFF_TILE + 1,
-    TILE_COUNT = LAMP_ON_TILE + 1
+    BLUE_CONCRETE_TILE = LAMP_ON_TILE + 1,
+    TILE_COUNT = BLUE_CONCRETE_TILE + 5
 };
 enum { OBSERVER_BACK, OBSERVER_FRONT, OBSERVER_SIDE, OBSERVER_TOP };
 enum {
@@ -182,7 +183,12 @@ static Image create_solid_atlas(void)
         "res/textures/block/dropper_side0.png",
         "res/textures/block/dropper_side1.png",
         "res/textures/block/redstone_lamp0.png",
-        "res/textures/block/redstone_lamp1.png"
+        "res/textures/block/redstone_lamp1.png",
+        "res/textures/block/blue_concrete.png",
+        "res/textures/block/gray_concrete.png",
+        "res/textures/block/green_concrete.png",
+        "res/textures/block/purple_concrete.png",
+        "res/textures/block/yellow_concrete.png"
     };
     Image sources[TILE_COUNT] = {0};
     Image atlas = {0};
@@ -482,13 +488,13 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureFilter(renderer->atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->atlas, TEXTURE_WRAP_CLAMP);
 
-    Image iron = load_tile("res/textures/block/iron_block.png");
+    Image iron = load_tile("res/textures/block/white_concrete.png");
     if (iron.data) {
         renderer->iron_texture = LoadTextureFromImage(iron);
         UnloadImage(iron);
     }
     if (!renderer->iron_texture.id) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot load the iron texture");
+        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot load the white concrete texture");
         block_renderer_unload(renderer);
         return false;
     }
@@ -668,6 +674,10 @@ void block_renderer_draw_cube(const BlockRenderer *renderer, BlockId id,
     if (!texture.id) return;
     switch (id) {
     case BLOCK_IRON: case BLOCK_REDSTONE_BLOCK: case BLOCK_GLASS: break;
+    case BLOCK_BLUE_CONCRETE: case BLOCK_GRAY_CONCRETE:
+    case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
+    case BLOCK_YELLOW_CONCRETE:
+        tile = BLUE_CONCRETE_TILE + id - BLOCK_BLUE_CONCRETE; break;
     case BLOCK_SLIME:          tile = SLIME_TILE; break;
     case BLOCK_NOTE_BLOCK:     tile = NOTE_BLOCK_TILE; break;
     case BLOCK_HONEY:          tile = HONEY_TILE; break;
@@ -1343,12 +1353,16 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         memcpy(uv, geometry.uv, (size_t)count * sizeof(geometry.uv[0]));
         return count;
     }
-    if (state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
+    if ((state.id >= BLOCK_BLUE_CONCRETE && state.id <= BLOCK_YELLOW_CONCRETE) ||
+        state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
         state.id == BLOCK_GLASS || state.id == BLOCK_SLIME ||
         state.id == BLOCK_NOTE_BLOCK || state.id == BLOCK_HONEY ||
         state.id == BLOCK_TARGET || state.id == BLOCK_REDSTONE_LAMP) {
         Texture2D texture = cube_texture(renderer, (BlockId)state.id);
-        int tile = state.id == BLOCK_SLIME ? SLIME_TILE :
+        int tile = (state.id >= BLOCK_BLUE_CONCRETE &&
+                    state.id <= BLOCK_YELLOW_CONCRETE) ?
+                       BLUE_CONCRETE_TILE + state.id - BLOCK_BLUE_CONCRETE :
+                   state.id == BLOCK_SLIME ? SLIME_TILE :
                    state.id == BLOCK_NOTE_BLOCK ? NOTE_BLOCK_TILE :
                    state.id == BLOCK_HONEY ? HONEY_TILE :
                    state.id == BLOCK_TARGET ? TARGET_TILE :
@@ -1569,7 +1583,8 @@ void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState sta
     }
     geometry->quads = block_renderer_build_uv(renderer, state, solid_faces, geometry->uv);
     int count = 0;
-    if (state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
+    if ((state.id >= BLOCK_BLUE_CONCRETE && state.id <= BLOCK_YELLOW_CONCRETE) ||
+        state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
         state.id == BLOCK_GLASS || state.id == BLOCK_OBSERVER ||
         state.id == BLOCK_BARREL || state.id == BLOCK_SLIME ||
         state.id == BLOCK_NOTE_BLOCK || state.id == BLOCK_HONEY ||

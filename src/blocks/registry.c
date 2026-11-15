@@ -20,6 +20,11 @@ const BlockDef *block_definition(BlockId id)
     static const BlockDef *const definitions[BLOCK_COUNT] = {
         [BLOCK_AIR] = &air,
         [BLOCK_IRON] = &rs_iron_def,
+        [BLOCK_BLUE_CONCRETE] = &rs_blue_concrete_def,
+        [BLOCK_GRAY_CONCRETE] = &rs_gray_concrete_def,
+        [BLOCK_GREEN_CONCRETE] = &rs_green_concrete_def,
+        [BLOCK_PURPLE_CONCRETE] = &rs_purple_concrete_def,
+        [BLOCK_YELLOW_CONCRETE] = &rs_yellow_concrete_def,
         [BLOCK_REDSTONE_BLOCK] = &rs_redstone_block_def,
         [BLOCK_REDSTONE_WIRE] = &rs_wire_def,
         [BLOCK_REDSTONE_TORCH] = &rs_torch_def,

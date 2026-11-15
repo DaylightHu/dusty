@@ -55,6 +55,9 @@ static int part_for(unsigned id)
     switch (id) {
     case BLOCK_IRON: return IRON;
     case BLOCK_REDSTONE_BLOCK: case BLOCK_OBSERVER:
+    case BLOCK_BLUE_CONCRETE: case BLOCK_GRAY_CONCRETE:
+    case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
+    case BLOCK_YELLOW_CONCRETE:
     case BLOCK_PISTON: case BLOCK_STICKY_PISTON: case BLOCK_BARREL:
     case BLOCK_SLIME: case BLOCK_NOTE_BLOCK: case BLOCK_HONEY:
     case BLOCK_TARGET: case BLOCK_HOPPER: case BLOCK_DROPPER:

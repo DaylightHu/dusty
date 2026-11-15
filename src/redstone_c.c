@@ -199,6 +199,11 @@ static bool node_supported(const RedstonePlan *plan, size_t id)
     case BLOCK_REDSTONE_REPEATER:
     case BLOCK_REDSTONE_COMPARATOR:
     case BLOCK_IRON:
+    case BLOCK_BLUE_CONCRETE:
+    case BLOCK_GRAY_CONCRETE:
+    case BLOCK_GREEN_CONCRETE:
+    case BLOCK_PURPLE_CONCRETE:
+    case BLOCK_YELLOW_CONCRETE:
     case BLOCK_SLIME:
     case BLOCK_TARGET:
         break;
