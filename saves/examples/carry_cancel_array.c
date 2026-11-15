@@ -16,7 +16,7 @@
 #define CPU_BACKEND 2
 #define GENERATED_C_BACKEND 3
 #ifndef ADDER_BACKEND
-#define ADDER_BACKEND REFERENCE_BACKEND
+#define ADDER_BACKEND GENERATED_C_BACKEND
 #endif
 
 #if ADDER_BACKEND == GENERATED_C_BACKEND
@@ -114,7 +114,7 @@ static bool read_number(const char *text, uint32_t max, uint32_t *value)
 
 int main(int argc, char **argv)
 {
-    uint32_t a = 255, b = 1, cin = 0;
+    uint32_t a = 12390, b = 60145, cin = 0;
     if (argc != 1 &&
         ((argc != 3 && argc != 4) ||
          !read_number(argv[1], UINT16_MAX, &a) ||

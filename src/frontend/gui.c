@@ -1747,9 +1747,9 @@ static void draw_pause(GuiApp *app)
     int center = gui_view_width()/2;
     Rectangle panel = {(float)center - 190, 105, 380, 400};
 
-    DrawRectangleRec(panel, (Color){226, 218, 196, 248});
-    DrawRectangleLinesEx(panel, 3.0f, (Color){34, 63, 66, 255});
-    draw_centered("GUI MENU", 137, 30, (Color){26, 50, 55, 255});
+    DrawRectangleRec(panel, (Color){43, 43, 46, 255});
+    DrawRectangleLinesEx(panel, 3.0f, (Color){84, 84, 91, 255});
+    draw_centered("GUI MENU", 137, 30, RAYWHITE);
 
     Rectangle resume = {(float)center - 140, 205, 280, 44};
     Rectangle save = {(float)center - 140, 265, 280, 44};
