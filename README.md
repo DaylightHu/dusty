@@ -49,19 +49,7 @@ the configuration, and `reload_config` to reload it.
 ### Terminal panes
 
 A terminal pane runs your shell from the project root. On Linux and macOS it
-uses a PTY and the bundled libvterm. Run `nvim` in the pane to use your own
-Neovim configuration. Use `Ctrl+Shift+V` to paste and `Shift+PageUp` or
-`Shift+PageDown` to scroll. On Windows the world GUI is available and terminal
-panes are unsupported. When using a workspace leader, press it twice to pass
-it into the focused terminal.
-
-Set `[terminal].font_size` and optionally `[terminal].font` in
-`config.toml`. The font setting accepts a path to a monospace TTF.
-
-Set `[terminal].background_opacity` from `0.0` (transparent) to `1.0`
-(opaque, the default). This applies to the default terminal background.
-Restart mcmux when enabling transparency for the first time. A desktop
-compositor is required.
+uses a PTY and the bundled libvterm. 
 
 ### C drivers
 

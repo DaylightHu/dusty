@@ -13,6 +13,7 @@ typedef struct {
     float fov, mouse_sensitivity, move_speed, scroll_lines;
     float terminal_background_opacity;
     char terminal_font[4096];
+    char terminal_fallback_font[4096];
 } AppSettings;
 
 /* A failed reload preserves the complete previous configuration. */

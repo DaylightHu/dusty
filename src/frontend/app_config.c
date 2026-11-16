@@ -243,7 +243,8 @@ static bool read_settings(Config *next,toml_datum_t root)
     if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys ")) return false;
     static const struct { const char *table,*allowed; } fields[] = {
         {"window"," vsync  fps_limit  msaa_samples  fov "},
-        {"editor"," font_size  tab_width "},{"output"," font_size "},{"terminal"," font_size  font  background_opacity "},
+        {"editor"," font_size  tab_width "},{"output"," font_size "},
+        {"terminal"," font_size  font  fallback_font  background_opacity "},
         {"input"," mouse_sensitivity  move_speed  scroll_lines "},
         {"world"," stream_radius "},{"workspace"," leader  leader_timeout_ms "}
     };
@@ -264,6 +265,12 @@ static bool read_settings(Config *next,toml_datum_t root)
         if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_font)
             return config_value_error("terminal.font", font, "expected a font path string");
         memcpy(s->terminal_font, font.u.s, (size_t)font.u.str.len + 1);
+    }
+    font = toml_seek(root, "terminal.fallback_font");
+    if (font.type != TOML_UNKNOWN) {
+        if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_fallback_font)
+            return config_value_error("terminal.fallback_font", font, "expected a font path string");
+        memcpy(s->terminal_fallback_font, font.u.s, (size_t)font.u.str.len + 1);
     }
     INT_FIELD("world.stream_radius",stream_radius,1,16);
     INT_FIELD("workspace.leader_timeout_ms",leader_timeout_ms,0,10000);
@@ -406,6 +413,7 @@ bool app_config_ensure_file(void)
         "msaa_samples = 4 # 0, 2, 4, 8; unsupported hardware uses single-sample rendering\n"
         "fov = 65.0 # 30..120 degrees\n\n"
         "[terminal]\nfont_size = 18 # 10..48\n# font = \"/absolute/path/to/font.ttf\"\n"
+        "# fallback_font = \"/absolute/path/to/chinese-font.otf\"\n"
         "# background_opacity = 0.6 # default 1.0; requires desktop compositing\n\n"
         "[input]\nmouse_sensitivity = 0.003 # 0.0001..0.1 radians per pixel\n"
         "move_speed = 5.4 # 0.1..100 blocks per second\nscroll_lines = 3.0 # 0.1..20\n\n"

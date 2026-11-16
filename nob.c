@@ -88,6 +88,7 @@ static const char *gui_sources[] = {
     "src/frontend/gui.c",
     "src/frontend/gui_view.c",
     "src/frontend/ui_font.c",
+    "src/frontend/terminal_font_fallback.c",
     "src/frontend/workspace_layout.c",
     "src/frontend/workspace_terminal.c",
     "src/frontend/workspace_driver.c",
@@ -522,6 +523,7 @@ static bool collect_project_headers(Files *headers)
     files_add(headers, RAYLIB_SRC "/raymath.h");
     files_add(headers, RAYLIB_SRC "/rlgl.h");
     files_add(headers, RAYLIB_SRC "/external/glad.h");
+    files_add(headers, RAYLIB_SRC "/external/stb_truetype.h");
     return true;
 }
 
@@ -620,6 +622,8 @@ static bool link_target(const char *output, const Files *objects)
     nob_cmd_append(&command,
         "-framework", "OpenGL",
         "-framework", "Cocoa",
+        "-framework", "CoreText",
+        "-framework", "CoreFoundation",
         "-framework", "IOKit",
         "-framework", "CoreAudio",
         "-framework", "CoreVideo");

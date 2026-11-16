@@ -1,5 +1,6 @@
 #include "ui_font.h"
 #include "gui.h"
+#include "terminal_font_fallback.h"
 #include "rlgl.h"
 
 #include <math.h>
@@ -105,6 +106,7 @@ static Font terminal_font_for_size(int size, const char *path)
 
 void ui_terminal_font_unload(void)
 {
+    terminal_font_fallback_unload();
     if (terminal_font.texture.id) UnloadFont(terminal_font);
     terminal_font = (Font){0};
     terminal_font_size = 0;
@@ -117,22 +119,38 @@ int ui_terminal_cell_width(int size, const char *path)
     return width > 0 ? width : 1;
 }
 
-void ui_terminal_glyph(int codepoint, int x, int y, int size,
+void ui_terminal_glyph(int codepoint, Rectangle cell, int size,
     bool bold, bool italic, Color color)
 {
     Font font = terminal_font.texture.id ? terminal_font : font_for_size(size);
+    if (!font.glyphs || font.glyphCount <= 0) return;
     int index = GetGlyphIndex(font, codepoint);
+    Texture2D atlas = {0};
+    Rectangle source;
+    bool use_fallback = font.glyphs[index].value != codepoint &&
+        terminal_font_fallback_glyph(codepoint, (int)cell.width - 1,
+                                     (int)cell.height - 2, &atlas, &source);
     if (font.glyphs[index].value != codepoint && codepoint >= 0x2500 && codepoint <= 0x257f)
         codepoint = codepoint == 0x2500 ? '-' : codepoint == 0x2502 ? '|' : '+';
     if (italic) {
         rlPushMatrix();
-        rlTranslatef((float)x, (float)y, 0);
+        rlTranslatef(cell.x, cell.y, 0);
         float skew[16] = {1,0,0,0, -.18f,1,0,0, 0,0,1,0, size*.13f,0,0,1};
         rlMultMatrixf(skew);
-        x = y = 0;
+        cell.x = cell.y = 0;
     }
-    DrawTextCodepoint(font, codepoint, (Vector2){(float)x,(float)y}, (float)size, color);
-    if (bold)
-        DrawTextCodepoint(font, codepoint, (Vector2){(float)x+1,(float)y}, (float)size, color);
+    if (use_fallback) {
+        Vector2 position = {cell.x + floorf((cell.width - source.width)/2),
+                            cell.y + floorf((cell.height - source.height)/2)};
+        DrawTextureRec(atlas, source, position, color);
+        if (bold) {
+            position.x += 1;
+            DrawTextureRec(atlas, source, position, color);
+        }
+    } else {
+        DrawTextCodepoint(font, codepoint, (Vector2){cell.x, cell.y}, (float)size, color);
+        if (bold)
+            DrawTextCodepoint(font, codepoint, (Vector2){cell.x+1, cell.y}, (float)size, color);
+    }
     if (italic) rlPopMatrix();
 }
