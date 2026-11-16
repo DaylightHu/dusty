@@ -128,7 +128,8 @@ void ui_terminal_glyph(int codepoint, Rectangle cell, int size,
     Texture2D atlas = {0};
     Rectangle source;
     bool use_fallback = font.glyphs[index].value != codepoint &&
-        terminal_font_fallback_glyph(codepoint, &atlas, &source);
+        terminal_font_fallback_glyph(codepoint, (int)cell.width - 1,
+                                     (int)cell.height - 2, &atlas, &source);
     if (font.glyphs[index].value != codepoint && codepoint >= 0x2500 && codepoint <= 0x257f)
         codepoint = codepoint == 0x2500 ? '-' : codepoint == 0x2502 ? '|' : '+';
     if (italic) {
@@ -139,17 +140,12 @@ void ui_terminal_glyph(int codepoint, Rectangle cell, int size,
         cell.x = cell.y = 0;
     }
     if (use_fallback) {
-        /* Fit the bitmap inside the width reported by libvterm. */
-        float width = fmaxf(1.0f, cell.width - (bold ? 3 : 2));
-        float height = fmaxf(1.0f, cell.height - 2);
-        float scale = fminf(1.0f, fminf(width/source.width, height/source.height));
-        Rectangle dest = {cell.x + floorf((cell.width - source.width*scale)/2),
-                          cell.y + floorf((cell.height - source.height*scale)/2),
-                          source.width*scale, source.height*scale};
-        DrawTexturePro(atlas, source, dest, (Vector2){0}, 0, color);
+        Vector2 position = {cell.x + floorf((cell.width - source.width)/2),
+                            cell.y + floorf((cell.height - source.height)/2)};
+        DrawTextureRec(atlas, source, position, color);
         if (bold) {
-            dest.x += 1;
-            DrawTexturePro(atlas, source, dest, (Vector2){0}, 0, color);
+            position.x += 1;
+            DrawTextureRec(atlas, source, position, color);
         }
     } else {
         DrawTextCodepoint(font, codepoint, (Vector2){cell.x, cell.y}, (float)size, color);

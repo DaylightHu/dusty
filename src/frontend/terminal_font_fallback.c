@@ -1,6 +1,7 @@
 #include "terminal_font_fallback.h"
 #include "rlgl.h"
 
+#include <math.h>
 #include <string.h>
 #ifdef __APPLE__
 #include <CoreText/CoreText.h>
@@ -21,6 +22,7 @@
 enum { SLOT_SIZE = 64, ATLAS_COLUMNS = 32, SLOT_COUNT = 1024 };
 typedef struct {
     int codepoint;
+    int max_width, max_height;
     Rectangle source;
     bool occupied;
 } FallbackGlyph;
@@ -113,18 +115,33 @@ void terminal_font_fallback_prepare(const char *path, int size, unsigned revisio
 #endif
 }
 
-static void cache_glyph(FallbackGlyph *entry, int slot, int codepoint)
+static void cache_glyph(FallbackGlyph *entry, int slot, int codepoint,
+                        int max_width, int max_height)
 {
     bool replace = entry->occupied;
-    *entry = (FallbackGlyph){.codepoint = codepoint, .occupied = replace};
+    *entry = (FallbackGlyph){.codepoint = codepoint, .max_width = max_width,
+                            .max_height = max_height, .occupied = replace};
     int index = stbtt_FindGlyphIndex(&fallback.font, codepoint);
     if (!index) return;
-    int size = fallback.size < SLOT_SIZE - 4 ? fallback.size : SLOT_SIZE - 4;
-    float scale = stbtt_ScaleForMappingEmToPixels(&fallback.font, size);
+
+    /* Rasterize at the size that fits the cell so thin strokes keep their
+     * coverage. Resizing an already rasterized glyph can drop those pixels. */
+    float scale = stbtt_ScaleForMappingEmToPixels(&fallback.font, fallback.size);
     int x0, y0, x1, y1;
     stbtt_GetGlyphBitmapBox(&fallback.font, index, scale, scale, &x0, &y0, &x1, &y1);
     int width = x1 - x0, height = y1 - y0;
-    if (width <= 0 || height <= 0 || width > SLOT_SIZE - 2 || height > SLOT_SIZE - 2) return;
+    if (width > max_width || height > max_height) {
+        /* A fractional outline can round out by up to one extra pixel. */
+        if (!stbtt_GetGlyphBox(&fallback.font, index, &x0, &y0, &x1, &y1)) return;
+        if (width > max_width && x1 > x0)
+            scale = fminf(scale, (float)(max_width - 1)/(x1 - x0));
+        if (height > max_height && y1 > y0)
+            scale = fminf(scale, (float)(max_height - 1)/(y1 - y0));
+        stbtt_GetGlyphBitmapBox(&fallback.font, index, scale, scale, &x0, &y0, &x1, &y1);
+        width = x1 - x0;
+        height = y1 - y0;
+    }
+    if (width <= 0 || height <= 0 || width > max_width || height > max_height) return;
     if (!fallback.atlas.id) {
         Image image = GenImageColor(ATLAS_COLUMNS * SLOT_SIZE,
                                     (SLOT_COUNT / ATLAS_COLUMNS) * SLOT_SIZE, BLANK);
@@ -152,12 +169,17 @@ static void cache_glyph(FallbackGlyph *entry, int slot, int codepoint)
     entry->occupied = true;
 }
 
-bool terminal_font_fallback_glyph(int codepoint, Texture2D *atlas, Rectangle *source)
+bool terminal_font_fallback_glyph(int codepoint, int max_width, int max_height,
+                                  Texture2D *atlas, Rectangle *source)
 {
-    if (!fallback.data || codepoint <= 0) return false;
+    if (!fallback.data || codepoint <= 0 || max_width < 2 || max_height < 2) return false;
+    if (max_width > SLOT_SIZE - 2) max_width = SLOT_SIZE - 2;
+    if (max_height > SLOT_SIZE - 2) max_height = SLOT_SIZE - 2;
     int slot = codepoint % SLOT_COUNT;
     FallbackGlyph *entry = &fallback.glyphs[slot];
-    if (entry->codepoint != codepoint) cache_glyph(entry, slot, codepoint);
+    if (entry->codepoint != codepoint || entry->max_width != max_width ||
+        entry->max_height != max_height)
+        cache_glyph(entry, slot, codepoint, max_width, max_height);
     if (entry->source.width <= 0) return false;
     *atlas = fallback.atlas;
     *source = entry->source;
