@@ -9,6 +9,7 @@
 #if defined(__linux__) || defined(__APPLE__)
 #include "app_config.h"
 #include "ui_font.h"
+#include "terminal_font_fallback.h"
 #include "rlgl.h"
 #include "../../third_party/libvterm/include/vterm.h"
 
@@ -566,9 +567,11 @@ static void draw_row(WorkspaceTerminal *terminal, int row)
         if (cell->chars[0] == UINT32_MAX || cell->attrs.conceal) continue;
         Color fg = terminal_color(terminal, cell->attrs.reverse ? cell->bg : cell->fg);
         int x = col * width;
+        Rectangle bounds = {(float)x, (float)y, (float)(width * cell->width),
+                            (float)terminal->cell_height};
         for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell->chars[i]; ++i)
             if (cell->chars[i] != ' ')
-                ui_terminal_glyph((int)cell->chars[i], x, y, terminal->font_size,
+                ui_terminal_glyph((int)cell->chars[i], bounds, terminal->font_size,
                     cell->attrs.bold, cell->attrs.italic, fg);
         int underline = y + terminal->cell_height - 3;
         if (cell->attrs.underline == VTERM_UNDERLINE_CURLY) {
@@ -593,6 +596,8 @@ static void terminal_size(WorkspaceTerminal *terminal, Rectangle box)
     int height = (int)((size + 4) * scale + .5f);
     int font_size = (int)(size * scale + .5f);
     int width = ui_terminal_cell_width(font_size, settings->terminal_font);
+    terminal_font_fallback_prepare(settings->terminal_fallback_font, font_size,
+                                   app_config_revision());
     int rows = clamp((int)((box.height - 12) * scale) / height, 1, MAX_ROWS);
     int cols = clamp((int)((box.width - 12) * scale) / width, 1, MAX_COLS);
     if (rows == terminal->rows && cols == terminal->cols &&
