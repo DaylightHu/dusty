@@ -11,53 +11,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#ifdef _WIN32
-#include <direct.h>
-#define config_mkdir(p) _mkdir(p)
-#else
-#define config_mkdir(p) mkdir(p,0700)
-#endif
-
 enum { CTRL=1, SHIFT=2, ALT=4, SUPER=8, KEY_COUNT=512,
        BINDING_LIMIT=512, TEXT_LIMIT=1024, PATH_LIMIT=4096 };
-#define S(x) (1u << APP_##x)
-typedef struct {
-    const char *name;
-    unsigned scopes;
-    const char *description;
-} Action;
-#define WORKSPACE_ACTION(n,d) {n,S(WORKSPACE),d}
-#define WORLD_ACTION(n) {n,S(WORLD),n}
-static const Action actions[] = {
-    WORKSPACE_ACTION("split_horizontal","Split terminal left / right"),
-    WORKSPACE_ACTION("split_vertical","Split terminal top / bottom"),
-    WORKSPACE_ACTION("focus_left","Focus left pane"), WORKSPACE_ACTION("focus_right","Focus right pane"),
-    WORKSPACE_ACTION("focus_up","Focus upper pane"), WORKSPACE_ACTION("focus_down","Focus lower pane"),
-    WORKSPACE_ACTION("resize_left","Move divider left"), WORKSPACE_ACTION("resize_right","Move divider right"),
-    WORKSPACE_ACTION("resize_up","Move divider up"), WORKSPACE_ACTION("resize_down","Move divider down"),
-    WORKSPACE_ACTION("next_pane","Focus next pane"), WORKSPACE_ACTION("terminal","Open terminal"),
-    WORKSPACE_ACTION("zoom","Zoom / restore terminal panes"), WORKSPACE_ACTION("close_pane","Close focused pane"),
-    WORKSPACE_ACTION("world","Restore and focus mc-gui"), WORKSPACE_ACTION("help","Show key bindings"),
-    WORKSPACE_ACTION("config","Edit configuration in terminal"),
-    WORKSPACE_ACTION("reload_config","Reload configuration"),
-    WORKSPACE_ACTION("cancel_run","Cancel the active simulation driver"),
-    WORLD_ACTION("forward"), WORLD_ACTION("backward"), WORLD_ACTION("left"), WORLD_ACTION("right"),
-    WORLD_ACTION("up"), WORLD_ACTION("down"), WORLD_ACTION("inventory"), WORLD_ACTION("pause"),
-    WORLD_ACTION("command"), WORLD_ACTION("look_left"), WORLD_ACTION("look_right"),
-    WORLD_ACTION("look_up"), WORLD_ACTION("look_down"), WORLD_ACTION("roll_left"),
-    WORLD_ACTION("slot_1"), WORLD_ACTION("slot_2"), WORLD_ACTION("slot_3"),
-    WORLD_ACTION("slot_4"), WORLD_ACTION("slot_5"), WORLD_ACTION("slot_6"),
-    WORLD_ACTION("slot_7"), WORLD_ACTION("slot_8"), WORLD_ACTION("slot_9")
+static const char *actions[] = {
+    "forward", "backward", "left", "right", "up", "down", "inventory", "pause",
+    "command", "look_left", "look_right", "look_up", "look_down", "roll_left",
+    "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6", "slot_7",
+    "slot_8", "slot_9"
 };
-static const char *scope_names[] = {"workspace","world"};
-typedef struct { int key, character, mods; bool leader; char text[64]; } Trigger;
-typedef struct { AppKeyScope scope; size_t action; Trigger trigger; int line, column; } Binding;
-typedef struct { AppSettings settings; Trigger leader; Binding bindings[BINDING_LIMIT]; size_t count; } Config;
+typedef struct { int key, character, mods; char text[64]; } Trigger;
+typedef struct { size_t action; Trigger trigger; int line, column; } Binding;
+typedef struct { AppSettings settings; Binding bindings[BINDING_LIMIT]; size_t count; } Config;
 static Config current;
 static char config_path[PATH_LIMIT], config_error[768];
 static bool ready;
-static unsigned revision;
 typedef struct { bool pressed[KEY_COUNT], down[KEY_COUNT]; int chars[TEXT_LIMIT], count, next, mods; } Input;
 static Input physical;
 
@@ -67,10 +34,10 @@ static bool fail(const char *format, ...)
     vsnprintf(config_error,sizeof(config_error),format,args); va_end(args);
     return false;
 }
-static int action_index(AppKeyScope scope,const char *name)
+static int action_index(const char *name)
 {
     for (size_t i=0;i<sizeof(actions)/sizeof(actions[0]);++i)
-        if ((actions[i].scopes&(1u<<scope)) && !strcmp(actions[i].name,name)) return (int)i;
+        if (!strcmp(actions[i],name)) return (int)i;
     return -1;
 }
 static bool equal_ci(const char *a,const char *b)
@@ -107,7 +74,6 @@ static bool parse_trigger(const char *text,Trigger *out)
         else if (equal_ci(name,"Shift")) flag=SHIFT;
         else if (equal_ci(name,"Alt") || equal_ci(name,"Opt")) flag=ALT;
         else if (equal_ci(name,"Super") || equal_ci(name,"Cmd")) flag=SUPER;
-        else if (equal_ci(name,"Leader") && !out->leader && name==copy) out->leader=true;
         else return false;
         if (flag && (out->mods&flag)) return false;
         out->mods|=flag; name=plus+1;
@@ -127,41 +93,25 @@ static bool parse_trigger(const char *text,Trigger *out)
     }
     return false;
 }
-static bool add_binding(Config *config,AppKeyScope scope,const char *name,const char *text)
+static bool add_binding(Config *config,const char *name,const char *text)
 {
-    int action=action_index(scope,name);
-    if (action<0) return fail("keys.%s: unknown action '%s'",scope_names[scope],name);
+    int action=action_index(name);
+    if (action<0) return fail("keys.world: unknown action '%s'",name);
     if (config->count==BINDING_LIMIT) return fail("too many key bindings (maximum %d)",BINDING_LIMIT);
     Trigger trigger;
-    if (!parse_trigger(text,&trigger) || (trigger.leader && scope!=APP_WORKSPACE))
-        return fail("keys.%s.%s: invalid binding '%s'",scope_names[scope],name,text);
-    bool continuous=scope==APP_WORLD &&
-        (!strcmp(name,"forward") || !strcmp(name,"backward") || !strcmp(name,"left") || !strcmp(name,"right") ||
+    if (!parse_trigger(text,&trigger))
+        return fail("keys.world.%s: invalid binding '%s'",name,text);
+    bool continuous=(!strcmp(name,"forward") || !strcmp(name,"backward") || !strcmp(name,"left") || !strcmp(name,"right") ||
          !strcmp(name,"up") || !strcmp(name,"down") || !strncmp(name,"look_",5) || !strcmp(name,"roll_left"));
     if (continuous && trigger.character && !isalnum(trigger.character) && !strchr("[];',./`-=\\",trigger.character))
         return fail("keys.world.%s: held movement needs a letter, digit, unshifted key or named key",name);
-    config->bindings[config->count++]=(Binding){.scope=scope,.action=(size_t)action,.trigger=trigger};
+    config->bindings[config->count++]=(Binding){.action=(size_t)action,.trigger=trigger};
     return true;
 }
 static void defaults(Config *config)
 {
     *config=(Config){.settings={.vsync=true,.fps_limit=60,.msaa_samples=4,.fov=65,
-        .terminal_font_size=18,.terminal_background_opacity=1.0f,.stream_radius=5,
-        .leader_timeout_ms=0,.mouse_sensitivity=0.003f,.move_speed=5.4f,.scroll_lines=3}};
-    (void)parse_trigger("Ctrl+B",&config->leader);
-    static const struct { const char *action,*trigger; } workspace[] = {
-        {"split_horizontal","Leader+%"},{"split_vertical","Leader+\""},
-        {"focus_left","Leader+Left"},{"focus_right","Leader+Right"},
-        {"focus_up","Leader+Up"},{"focus_down","Leader+Down"},
-        {"resize_left","Leader+Ctrl+Left"},{"resize_left","Leader+H"},
-        {"resize_right","Leader+Ctrl+Right"},{"resize_right","Leader+L"},
-        {"resize_up","Leader+Ctrl+Up"},{"resize_up","Leader+K"},
-        {"resize_down","Leader+Ctrl+Down"},{"resize_down","Leader+J"},
-        {"next_pane","Leader+o"},{"terminal","Leader+c"},{"zoom","Leader+z"},
-        {"close_pane","Leader+x"},{"world","Leader+g"},{"help","Leader+?"},
-        {"config","Leader+,"},{"reload_config","Leader+r"},{"cancel_run","Leader+k"}
-    };
-    for (size_t i=0;i<sizeof(workspace)/sizeof(workspace[0]);++i) (void)add_binding(config,APP_WORKSPACE,workspace[i].action,workspace[i].trigger);
+        .stream_radius=5,.mouse_sensitivity=0.003f,.move_speed=5.4f}};
     static const struct { const char *action,*trigger; } world[] = {
         {"forward","w"},{"backward","s"},{"left","a"},{"right","d"},
         {"up","Space"},{"down","LeftShift"},{"down","RightShift"},
@@ -171,7 +121,7 @@ static void defaults(Config *config)
         {"slot_1","1"},{"slot_2","2"},{"slot_3","3"},{"slot_4","4"},{"slot_5","5"},
         {"slot_6","6"},{"slot_7","7"},{"slot_8","8"},{"slot_9","9"}
     };
-    for (size_t i=0;i<sizeof(world)/sizeof(world[0]);++i) (void)add_binding(config,APP_WORLD,world[i].action,world[i].trigger);
+    for (size_t i=0;i<sizeof(world)/sizeof(world[0]);++i) (void)add_binding(config,world[i].action,world[i].trigger);
 }
 
 const AppSettings *app_config_current(void)
@@ -179,9 +129,7 @@ const AppSettings *app_config_current(void)
     if (!ready) { defaults(&current); ready=true; }
     return &current.settings;
 }
-const char *app_config_path(void) { return config_path; }
 const char *app_config_error(void) { return config_error; }
-unsigned app_config_revision(void) { return revision; }
 
 static bool resolve_path(void)
 {
@@ -240,13 +188,12 @@ static bool number(toml_datum_t root,const char *name,double low,double high,dou
 }
 static bool read_settings(Config *next,toml_datum_t root)
 {
+    /* Accept obsolete tables so existing configuration files still load. */
     if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys ")) return false;
     static const struct { const char *table,*allowed; } fields[] = {
         {"window"," vsync  fps_limit  msaa_samples  fov "},
-        {"editor"," font_size  tab_width "},{"output"," font_size "},
-        {"terminal"," font_size  font  fallback_font  background_opacity "},
         {"input"," mouse_sensitivity  move_speed  scroll_lines "},
-        {"world"," stream_radius "},{"workspace"," leader  leader_timeout_ms "}
+        {"world"," stream_radius "}
     };
     for (size_t i=0;i<sizeof(fields)/sizeof(fields[0]);++i)
         if (!allowed_table(toml_seek(root,fields[i].table),fields[i].table,fields[i].allowed)) return false;
@@ -258,25 +205,9 @@ static bool read_settings(Config *next,toml_datum_t root)
     if (s->msaa_samples!=0 && s->msaa_samples!=2 && s->msaa_samples!=4 && s->msaa_samples!=8)
         return config_value_error("window.msaa_samples",toml_seek(root,"window.msaa_samples"),"use 0, 2, 4 or 8");
     FLOAT_FIELD("window.fov",fov,30,120);
-    INT_FIELD("terminal.font_size",terminal_font_size,10,48);
-    FLOAT_FIELD("terminal.background_opacity",terminal_background_opacity,0,1);
-    toml_datum_t font = toml_seek(root, "terminal.font");
-    if (font.type != TOML_UNKNOWN) {
-        if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_font)
-            return config_value_error("terminal.font", font, "expected a font path string");
-        memcpy(s->terminal_font, font.u.s, (size_t)font.u.str.len + 1);
-    }
-    font = toml_seek(root, "terminal.fallback_font");
-    if (font.type != TOML_UNKNOWN) {
-        if (!binding_string(font) || (size_t)font.u.str.len >= sizeof s->terminal_fallback_font)
-            return config_value_error("terminal.fallback_font", font, "expected a font path string");
-        memcpy(s->terminal_fallback_font, font.u.s, (size_t)font.u.str.len + 1);
-    }
     INT_FIELD("world.stream_radius",stream_radius,1,16);
-    INT_FIELD("workspace.leader_timeout_ms",leader_timeout_ms,0,10000);
     FLOAT_FIELD("input.mouse_sensitivity",mouse_sensitivity,0.0001,0.1);
     FLOAT_FIELD("input.move_speed",move_speed,0.1,100);
-    FLOAT_FIELD("input.scroll_lines",scroll_lines,0.1,20);
 #undef INT_FIELD
 #undef FLOAT_FIELD
     toml_datum_t v=toml_seek(root,"window.vsync");
@@ -284,81 +215,64 @@ static bool read_settings(Config *next,toml_datum_t root)
         if (v.type!=TOML_BOOLEAN) return config_value_error("window.vsync",v,"expected true or false");
         s->vsync=v.u.boolean;
     }
-    v=toml_seek(root,"workspace.leader");
-    if (v.type!=TOML_UNKNOWN) {
-        if (!binding_string(v) || (v.u.s[0] &&
-            (!parse_trigger(v.u.s,&next->leader) || next->leader.leader)))
-            return config_value_error("workspace.leader",v,"expected a key, key chord or empty string");
-        if (!v.u.s[0]) next->leader=(Trigger){0};
-    }
     return true;
 }
 static bool read_bindings(Config *next,toml_datum_t root)
 {
     toml_datum_t keys=toml_seek(root,"keys");
     if (!allowed_table(keys,"keys"," workspace  normal  visual  insert  command  browser  info  output  world ")) return false;
-    for (int scope=0;scope<APP_SCOPE_COUNT;++scope) {
-        char path[64]; snprintf(path,sizeof(path),"keys.%s",scope_names[scope]);
-        toml_datum_t table=toml_seek(root,path);
-        if (table.type==TOML_UNKNOWN) continue;
-        if (table.type!=TOML_TABLE) return config_value_error(path,table,"expected a table");
-        for (int i=0;i<table.u.tab.size;++i) {
-            const char *name=table.u.tab.key[i]; toml_datum_t value=table.u.tab.value[i];
-            if ((size_t)table.u.tab.len[i]!=strlen(name)) return config_value_error(path,value,"action must not contain NUL characters");
-            if (scope==APP_WORKSPACE && !strcmp(name,"output")) name="terminal";
-            int action=action_index((AppKeyScope)scope,name);
-            if (action<0) return config_value_error(name,value,"unknown action in this scope");
-            for (size_t j=0;j<next->count;)
-                if ((int)next->bindings[j].scope==scope && (int)next->bindings[j].action==action)
-                    next->bindings[j]=next->bindings[--next->count];
-                else ++j;
-            if (value.type==TOML_STRING) {
-                if (!binding_string(value)) return config_value_error(name,value,"binding must not contain NUL characters");
-                if (!add_binding(next,(AppKeyScope)scope,name,value.u.s)) {
-                    char detail[768]; snprintf(detail,sizeof(detail),"%s",config_error);
-                    return config_value_error(path,value,detail);
-                }
-                next->bindings[next->count-1].line=value.lineno;
-                next->bindings[next->count-1].column=value.colno;
-            } else if (value.type==TOML_ARRAY) {
-                for (int j=0;j<value.u.arr.size;++j) {
-                    toml_datum_t item=value.u.arr.elem[j];
-                    if (!binding_string(item)) return config_value_error(name,item,"bindings must be strings without NUL characters");
-                    if (!add_binding(next,(AppKeyScope)scope,name,item.u.s)) {
-                        char detail[768]; snprintf(detail,sizeof(detail),"%s",config_error);
-                        return config_value_error(path,item,detail);
-                    }
-                    next->bindings[next->count-1].line=item.lineno;
-                    next->bindings[next->count-1].column=item.colno;
-                }
-            } else return config_value_error(name,value,"expected a string or array; [] disables the action");
+    const char *path = "keys.world";
+    toml_datum_t table = toml_seek(root, path);
+    if (table.type == TOML_UNKNOWN) return true;
+    if (table.type != TOML_TABLE) return config_value_error(path, table, "expected a table");
+    for (int i = 0; i < table.u.tab.size; ++i) {
+        const char *name = table.u.tab.key[i];
+        toml_datum_t value = table.u.tab.value[i];
+        if ((size_t)table.u.tab.len[i] != strlen(name))
+            return config_value_error(path, value, "action must not contain NUL characters");
+        int action = action_index(name);
+        if (action < 0) return config_value_error(name, value, "unknown world action");
+        for (size_t j = 0; j < next->count;) {
+            if (next->bindings[j].action == (size_t)action)
+                next->bindings[j] = next->bindings[--next->count];
+            else ++j;
+        }
+        if (value.type != TOML_STRING && value.type != TOML_ARRAY)
+            return config_value_error(name, value, "expected a string or array; [] disables the action");
+        int count = value.type == TOML_ARRAY ? value.u.arr.size : 1;
+        for (int j = 0; j < count; ++j) {
+            toml_datum_t item = value.type == TOML_ARRAY ? value.u.arr.elem[j] : value;
+            if (!binding_string(item))
+                return config_value_error(name, item, "bindings must be strings without NUL characters");
+            if (!add_binding(next, name, item.u.s)) {
+                char detail[768];
+                snprintf(detail, sizeof(detail), "%s", config_error);
+                return config_value_error(path, item, detail);
+            }
+            next->bindings[next->count - 1].line = item.lineno;
+            next->bindings[next->count - 1].column = item.colno;
         }
     }
-    for (size_t i=0;i<next->count;++i) {
-        Trigger *t=&next->bindings[i].trigger;
-        if (!t->leader && t->key==next->leader.key && t->character==next->leader.character && t->mods==next->leader.mods)
-            return fail("%s:%d:%d: keys.%s.%s: '%s' conflicts with workspace.leader",config_path,
-                        next->bindings[i].line,next->bindings[i].column,scope_names[next->bindings[i].scope],
-                        actions[next->bindings[i].action].name,t->text);
-    }
-    for (size_t i=0;i<next->count;++i) for (size_t j=0;j<i;++j) {
-        Binding *a=&next->bindings[i],*b=&next->bindings[j];
-        if (a->scope==b->scope && a->trigger.key==b->trigger.key &&
-            a->trigger.character==b->trigger.character && a->trigger.mods==b->trigger.mods && a->trigger.leader==b->trigger.leader)
-            return fail("%s:%d:%d: keys.%s: '%s' is bound to both %s and %s",config_path,
-                        a->line ? a->line : b->line,a->line ? a->column : b->column,scope_names[a->scope],a->trigger.text,
-                        actions[a->action].name,actions[b->action].name);
+    for (size_t i = 0; i < next->count; ++i) {
+        for (size_t j = 0; j < i; ++j) {
+            Binding *a = &next->bindings[i], *b = &next->bindings[j];
+            if (a->trigger.key == b->trigger.key &&
+                a->trigger.character == b->trigger.character &&
+                a->trigger.mods == b->trigger.mods)
+                return fail("%s:%d:%d: keys.world: '%s' is bound to both %s and %s",
+                            config_path, a->line ? a->line : b->line,
+                            a->line ? a->column : b->column, a->trigger.text,
+                            actions[a->action], actions[b->action]);
+        }
     }
     return true;
 }
-bool app_config_reload(void)
+static bool read_config(void)
 {
-    (void)app_config_current(); config_error[0]='\0';
-    if (!config_path[0] && !resolve_path()) return false;
     FILE *file=fopen(config_path,"rb");
     Config next; defaults(&next);
     if (!file) {
-        if (errno==ENOENT) { current=next; ++revision; return true; }
+        if (errno==ENOENT) return true;
         return fail("cannot open %s: %s",config_path,strerror(errno));
     }
     char *text=malloc(1024*1024+1);
@@ -374,105 +288,14 @@ bool app_config_reload(void)
     }
     bool ok=read_settings(&next,result.toptab) && read_bindings(&next,result.toptab);
     toml_free(result);
-    if (ok) { current=next; ++revision; }
+    if (ok) current=next;
     return ok;
 }
 bool app_config_init(void)
 {
     defaults(&current); ready=true; config_path[0]='\0'; config_error[0]='\0';
-    return resolve_path() && app_config_reload();
+    return resolve_path() && read_config();
 }
-bool app_config_ensure_file(void)
-{
-    if (!config_path[0] && !resolve_path()) return false;
-    FILE *existing=fopen(config_path,"rb");
-    if (existing) { fclose(existing); return true; }
-    if (errno!=ENOENT) return fail("cannot open %s: %s",config_path,strerror(errno));
-    char path[PATH_LIMIT]; snprintf(path,sizeof(path),"%s",config_path);
-    for (char *p=path+1;*p;++p) if (*p=='/' || *p=='\\') {
-        if (p==path+2 && path[1]==':') continue;
-        char c=*p;*p=0;
-        if (config_mkdir(path)!=0 && errno!=EEXIST) return fail("cannot create %s: %s",path,strerror(errno));
-        *p=c;
-    }
-    FILE *file=fopen(config_path,"wx");
-    if (!file) return errno==EEXIST || fail("cannot create %s: %s",config_path,strerror(errno));
-    Config base; defaults(&base);
-    fputs("# mcmux configuration. Missing settings keep built-in defaults.\n"
-        "# Save, then use the reload_config binding to reload.\n"
-        "# MCMUX_CONFIG may override this file with an absolute path.\n"
-        "# Key values are strings or arrays; [] disables an action.\n"
-        "# Each action replaces its default bindings only in the named scope.\n"
-        "# Leader+X means press the workspace leader, release it, then X.\n"
-        "# Set workspace.leader to an empty string to disable the leader.\n"
-        "# Modifiers: Ctrl, Shift, Alt/Opt, Super/Cmd. Named keys: Escape, Enter,\n"
-        "# Tab, Space, arrows, Home, End, PageUp, PageDown, Backspace, Delete, F1..F12.\n"
-        "# A single printable character uses the typed character (keyboard-layout aware).\n"
-        "\n"
-        "[window]\nvsync = true\nfps_limit = 60 # 0..1000; 0 removes the frame cap\n"
-        "msaa_samples = 4 # 0, 2, 4, 8; unsupported hardware uses single-sample rendering\n"
-        "fov = 65.0 # 30..120 degrees\n\n"
-        "[terminal]\nfont_size = 18 # 10..48\n# font = \"/absolute/path/to/font.ttf\"\n"
-        "# fallback_font = \"/absolute/path/to/chinese-font.otf\"\n"
-        "# background_opacity = 0.6 # default 1.0; requires desktop compositing\n\n"
-        "[input]\nmouse_sensitivity = 0.003 # 0.0001..0.1 radians per pixel\n"
-        "move_speed = 5.4 # 0.1..100 blocks per second\nscroll_lines = 3.0 # 0.1..20\n\n"
-        "[world]\nstream_radius = 5 # 1..16 chunks; affects the loaded view, not circuit semantics\n\n"
-        "[workspace]\nleader = \"Ctrl+B\"\nleader_timeout_ms = 0 # 0 disables timeout\n",file);
-    for (int scope=0;scope<APP_SCOPE_COUNT;++scope) {
-        fprintf(file,"\n[keys.%s]\n",scope_names[scope]);
-        for (size_t action=0;action<sizeof(actions)/sizeof(actions[0]);++action) {
-            if (!(actions[action].scopes&(1u<<scope))) continue;
-            fprintf(file,"%s = [",actions[action].name); bool first=true;
-            for (size_t i=0;i<base.count;++i) {
-                Binding *b=&base.bindings[i];
-                if ((int)b->scope!=scope || b->action!=action) continue;
-                fputs(first ? "\"" : ", \"",file); first=false;
-                for (const char *p=b->trigger.text;*p;++p) {
-                    if (*p=='\"' || *p=='\\') fputc('\\',file);
-                    fputc(*p,file);
-                }
-                fputc('"',file);
-            }
-            fputs("]\n",file);
-        }
-    }
-    bool ok=!ferror(file);
-    if (fclose(file)!=0) ok=false;
-    return ok || fail("cannot write %s",config_path);
-}
-
-size_t app_config_action_count(AppKeyScope scope)
-{
-    size_t count=0; for (size_t i=0;i<sizeof(actions)/sizeof(actions[0]);++i) if (actions[i].scopes&(1u<<scope)) ++count;
-    return count;
-}
-const char *app_config_action_name(AppKeyScope scope,size_t index)
-{
-    for (size_t i=0;i<sizeof(actions)/sizeof(actions[0]);++i) if (actions[i].scopes&(1u<<scope)) {
-        if (!index--) return actions[i].name;
-    }
-    return "";
-}
-void app_config_describe(AppKeyScope scope,const char *name,char *text,size_t capacity)
-{
-    if (!capacity) return;
-    text[0]=0;
-    for (size_t i=0;i<current.count;++i) {
-        Binding *b=&current.bindings[i];
-        if (b->scope!=scope || strcmp(actions[b->action].name,name)) continue;
-        size_t used=strlen(text);
-        const char *trigger=b->trigger.text;
-        char expanded[140];
-        if (b->trigger.leader) {
-            if (!current.leader.text[0]) continue;
-            snprintf(expanded,sizeof(expanded),"%s then %s",current.leader.text,trigger+7); trigger=expanded;
-        }
-        if (used<capacity) snprintf(text+used,capacity-used,"%s%s",used ? " / " : "",trigger);
-    }
-    if (!text[0]) snprintf(text,capacity,"unbound");
-}
-
 void app_input_frame(void)
 {
     physical=(Input){0};
@@ -498,21 +321,11 @@ static bool match(const Trigger *t,bool held)
     for (int i=0;i<physical.count;++i) if (physical.chars[i]==t->character) return true;
     return false;
 }
-bool app_input_leader(void) { return current.leader.text[0] && match(&current.leader,false); }
-const char *app_input_workspace(bool after_leader)
-{
-    for (size_t i=0;i<current.count;++i) {
-        Binding *b=&current.bindings[i];
-        if (b->scope==APP_WORKSPACE && b->trigger.leader==after_leader && match(&b->trigger,false))
-            return actions[b->action].name;
-    }
-    return NULL;
-}
 bool app_input_world(const char *name,bool held)
 {
     for (size_t i=0;i<current.count;++i) {
         Binding *b=&current.bindings[i];
-        if (b->scope==APP_WORLD && !strcmp(actions[b->action].name,name) && match(&b->trigger,held)) return true;
+        if (!strcmp(actions[b->action],name) && match(&b->trigger,held)) return true;
     }
     return false;
 }
@@ -520,4 +333,3 @@ int app_input_char(void)
 {
     return physical.next < physical.count ? physical.chars[physical.next++] : 0;
 }
-void app_input_discard(void) { physical.next = physical.count; }

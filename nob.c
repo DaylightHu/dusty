@@ -21,10 +21,9 @@
 #define RAYLIB_DIR "third_party/raylib"
 #define RAYLIB_SRC RAYLIB_DIR "/src"
 #define TOML_DIR "third_party/tomlc17"
-#define VTERM_DIR "third_party/libvterm"
 #define RAYLIB_CONFIG "raylib_config.h"
-#define MAC_APP "build/macos/mcmux.app"
-#define MAC_APP_BINARY MAC_APP "/Contents/MacOS/machinecraft_gui"
+#define MAC_APP "build/macos/Dusty.app"
+#define MAC_APP_BINARY MAC_APP "/Contents/MacOS/dusty"
 
 static const char *common_sources[] = {
     "src/mcmux.c",
@@ -80,30 +79,13 @@ static const char *common_sources[] = {
 static const char *gui_sources[] = {
     TOML_DIR "/tomlc17.c",
     "src/frontend/app_config.c",
-    "src/gui_main.c",
+    "src/dusty_main.c",
     "src/command_completion.c",
     "src/edit_command.c",
     "src/plot_command.c",
     "src/tick_command.c",
     "src/frontend/gui.c",
-    "src/frontend/gui_view.c",
     "src/frontend/ui_font.c",
-    "src/frontend/terminal_font_fallback.c",
-    "src/frontend/workspace_layout.c",
-    "src/frontend/workspace_terminal.c",
-    "src/frontend/workspace_driver.c",
-#if defined(__linux__) || defined(__APPLE__)
-    VTERM_DIR "/src/encoding.c",
-    VTERM_DIR "/src/keyboard.c",
-    VTERM_DIR "/src/mouse.c",
-    VTERM_DIR "/src/parser.c",
-    VTERM_DIR "/src/pen.c",
-    VTERM_DIR "/src/screen.c",
-    VTERM_DIR "/src/state.c",
-    VTERM_DIR "/src/unicode.c",
-    VTERM_DIR "/src/vterm.c",
-#endif
-    "src/frontend/world_session_manager.c",
     "src/frontend/block_renderer.c",
     "src/frontend/world_renderer.c",
     "src/frontend/world_msaa.c",
@@ -270,7 +252,7 @@ static bool supported_platform(void)
 #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
     return true;
 #else
-    nob_log(NOB_ERROR, "Machinecraft currently supports macOS, Windows, and Linux builds");
+    nob_log(NOB_ERROR, "Dusty currently supports macOS, Windows, and Linux builds");
     return false;
 #endif
 }
@@ -515,7 +497,6 @@ static bool collect_project_headers(Files *headers)
 {
     if (!nob_walk_dir("include", collect_header, .data = headers)) return false;
     if (!nob_walk_dir("src", collect_header, .data = headers)) return false;
-    if (!nob_walk_dir(VTERM_DIR, collect_header, .data = headers)) return false;
     files_add(headers, "nob.c");
     files_add(headers, RAYLIB_CONFIG);
     files_add(headers, TOML_DIR "/tomlc17.h");
@@ -563,11 +544,8 @@ static bool compile_project_source(const char *source, const Files *headers,
         Nob_Cmd command = {0};
         nob_cmd_append(&command,
             compiler(), "-std=c11", "-O2", "-Wall", "-Wextra",
-            "-Iinclude", "-Isrc", "-I" RAYLIB_SRC, "-I" VTERM_DIR "/include",
+            "-Iinclude", "-Isrc", "-I" RAYLIB_SRC,
             "-c", source, "-o", output);
-        if (strncmp(source, VTERM_DIR "/", sizeof(VTERM_DIR)) == 0)
-            nob_cmd_append(&command, "-Wno-unused-parameter", "-Wno-missing-field-initializers",
-                "-Wno-implicit-fallthrough", "-Wno-sign-compare", "-Wno-unused-but-set-variable");
         if (!nob_cmd_run(&command)) return false;
     }
 
@@ -631,7 +609,7 @@ static bool link_target(const char *output, const Files *objects)
     nob_cmd_append(&command,
         "-lopengl32", "-lgdi32", "-lwinmm", "-lshell32");
 #elif defined(__linux__)
-    nob_cmd_append(&command, "-lGL", "-lX11", "-lm", "-pthread", "-ldl", "-lutil");
+    nob_cmd_append(&command, "-lGL", "-lX11", "-lm", "-pthread", "-ldl");
 #endif
 
     return nob_cmd_run(&command);
@@ -699,7 +677,7 @@ static bool compile_sources(const char **sources, size_t source_count,
     return true;
 }
 
-static bool build_machinecraft(void)
+static bool build_dusty(void)
 {
     if (!supported_platform() || !ensure_build_directories()) return false;
 
@@ -730,7 +708,7 @@ static bool build_machinecraft(void)
 #if defined(_WIN32)
     if (!compile_gui_icon(&link_objects)) goto cleanup;
 #endif
-    const char *output = nob_temp_sprintf("%s/machinecraft_gui%s",
+    const char *output = nob_temp_sprintf("%s/dusty%s",
                                           platform_build_dir(), executable_suffix());
     if (!link_target(output, &link_objects)) goto cleanup;
 #if defined(__APPLE__)
@@ -1207,9 +1185,9 @@ static void print_help(const char *program)
 {
     printf("Usage: %s [command]\n\n", program);
     printf("Commands:\n");
-    printf("  build        Build the GUI (default)\n");
-    printf("  gui          Build only the GUI\n");
-    printf("  run          Build and run the GUI from the repository root\n");
+    printf("  build        Build Dusty (default)\n");
+    printf("  gui          Alias for build\n");
+    printf("  run NAME     Build Dusty and open the named world\n");
     printf("  vendor-list  Print vendored files required by macOS, Windows, and Linux\n");
     printf("  precommit    Stage required raylib/TOML files and verify an index-only build\n");
     printf("  reader       Build build/inspect_structure, a standalone .mcs reader\n");
@@ -1255,21 +1233,25 @@ int main(int argc, char **argv)
         return build_user_program(argv[0],strcmp(command,"run-c")==0) ? 0 : 1;
     }
     if (strcmp(command, "build") == 0) {
-        return build_machinecraft() ? 0 : 1;
+        return build_dusty() ? 0 : 1;
     }
     if (strcmp(command, "gui") == 0) {
-        return build_machinecraft() ? 0 : 1;
+        return build_dusty() ? 0 : 1;
     }
     if (strcmp(command, "run") == 0) {
-        if (!build_machinecraft()) return 1;
+        if (argc != 1) {
+            nob_log(NOB_ERROR, "usage: %s run NAME", program);
+            return 1;
+        }
+        if (!build_dusty()) return 1;
         Nob_Cmd run = {0};
 #if defined(__APPLE__)
         const char *binary = MAC_APP_BINARY;
 #else
-        const char *binary = nob_temp_sprintf("%s/machinecraft_gui%s",
+        const char *binary = nob_temp_sprintf("%s/dusty%s",
                                               platform_build_dir(), executable_suffix());
 #endif
-        nob_cmd_append(&run, binary);
+        nob_cmd_append(&run, binary, "load", argv[0]);
         return nob_cmd_run(&run) ? 0 : 1;
     }
     if (strcmp(command, "vendor-list") == 0) {

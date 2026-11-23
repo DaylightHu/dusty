@@ -8,11 +8,14 @@ fail()
     exit 1
 }
 
-[ -n "${MCMUX_PROJECT:-}" ] && [ -n "${MCMUX_RUN_FD:-}" ] ||
-    fail 'Run this command from a mcmux terminal pane.'
+project=${MCMUX_PROJECT:-}
+if [ -z "$project" ]; then
+    project=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) ||
+        fail 'Cannot locate the project directory.'
+fi
 
 if [ "$task" = mcmodel ] && { [ "$#" -eq 2 ] || [ "$#" -eq 3 ]; }; then
-    cd "$MCMUX_PROJECT" || exit 1
+    cd "$project" || exit 1
     exec ./nob export-c "$@"
 fi
 
@@ -26,13 +29,10 @@ case "$source" in
     *) fail "Expected a C file: $source" ;;
 esac
 
-cd "$MCMUX_PROJECT" || exit 1
+cd "$project" || exit 1
 case "$task" in
     mcmake) exec ./nob build-c "$source" ;;
-    mcrun)
-        [ -n "${MCMUX_HOST:-}" ] || fail 'Cannot locate the mcmux host.'
-        exec "$MCMUX_HOST" --run-driver "$source"
-        ;;
+    mcrun) exec ./nob run-c "$source" ;;
     mcmodel)
         annotation=
         found=false

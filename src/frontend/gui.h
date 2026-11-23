@@ -1,12 +1,10 @@
 #ifndef MC_GUI_H
 #define MC_GUI_H
 
-#include "world_session_manager.h"
+#include "rs/session.h"
 
-/* The host retains the manager after this frontend detaches or returns. */
-int gui_run(WorldSessionManager *world_sessions);
-
-/* Resolve a relative resource path for one immediate load on the GUI thread. */
+/* The caller owns the loaded session for the duration of the viewer. */
+int gui_run(GameSession *session, const char *world_name);
 const char *gui_asset_path(const char *relative);
 
 #endif

@@ -1,4 +1,3 @@
-#include "gui_view.h"
 #include "hotbar.h"
 #include "app_config.h"
 #include <stdio.h>
@@ -12,8 +11,8 @@ enum {
 static Rectangle hotbar_slot_rectangle(int index)
 {
     int bar_width = HOTBAR_SLOT_COUNT*HOTBAR_SLOT_SIZE + 2*HOTBAR_PADDING;
-    int bar_x = (gui_view_width() - bar_width)/2;
-    int bar_y = gui_view_height() -
+    int bar_x = (GetScreenWidth() - bar_width)/2;
+    int bar_y = GetScreenHeight() -
                 (HOTBAR_SLOT_SIZE + 2*HOTBAR_PADDING) - HOTBAR_BOTTOM_MARGIN;
     return (Rectangle){
         (float)(bar_x + HOTBAR_PADDING + index*HOTBAR_SLOT_SIZE),
@@ -60,7 +59,7 @@ void hotbar_update(Hotbar *hotbar)
     }
 
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        int slot = hotbar_slot_at(gui_view_mouse());
+        int slot = hotbar_slot_at(GetMousePosition());
         if (slot >= 0) {
             hotbar->selected_slot = slot;
             return;
@@ -148,8 +147,8 @@ void hotbar_draw(const Hotbar *hotbar, const Inventory *inventory)
 
     const int bar_width = HOTBAR_SLOT_COUNT*HOTBAR_SLOT_SIZE + 2*HOTBAR_PADDING;
     const int bar_height = HOTBAR_SLOT_SIZE + 2*HOTBAR_PADDING;
-    int bar_x = (gui_view_width() - bar_width)/2;
-    int bar_y = gui_view_height() - bar_height - HOTBAR_BOTTOM_MARGIN;
+    int bar_x = (GetScreenWidth() - bar_width)/2;
+    int bar_y = GetScreenHeight() - bar_height - HOTBAR_BOTTOM_MARGIN;
 
     DrawRectangle(bar_x, bar_y, bar_width, bar_height,
                   (Color){20, 20, 20, 210});

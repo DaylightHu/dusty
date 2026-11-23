@@ -1,6 +1,0 @@
-libvterm 0.3.3, from https://www.leonerd.org.uk/code/libvterm/
-Only the headers, implementation and license are included.
-
-Local parser changes bound CSI parameters and numeric fields and avoid
-arithmetic on an absent escape-string pointer. REP ignores repeats before
-any printable character and limits the count to the remaining columns.
