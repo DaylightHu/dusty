@@ -664,59 +664,6 @@ static Texture2D cube_texture(const BlockRenderer *renderer, BlockId id)
     return renderer->atlas;
 }
 
-void block_renderer_draw_cube(const BlockRenderer *renderer, BlockId id,
-                              Vector3 center)
-{
-    if (!renderer || !renderer->atlas.id) return;
-
-    int tile = 0;
-    Texture2D texture = cube_texture(renderer, id);
-    if (!texture.id) return;
-    switch (id) {
-    case BLOCK_IRON: case BLOCK_REDSTONE_BLOCK: case BLOCK_GLASS: break;
-    case BLOCK_BLUE_CONCRETE: case BLOCK_GRAY_CONCRETE:
-    case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
-    case BLOCK_YELLOW_CONCRETE:
-        tile = BLUE_CONCRETE_TILE + id - BLOCK_BLUE_CONCRETE; break;
-    case BLOCK_SLIME:          tile = SLIME_TILE; break;
-    case BLOCK_NOTE_BLOCK:     tile = NOTE_BLOCK_TILE; break;
-    case BLOCK_HONEY:          tile = HONEY_TILE; break;
-    case BLOCK_TARGET:         tile = TARGET_TILE; break;
-    case BLOCK_REDSTONE_LAMP:  tile = LAMP_OFF_TILE; break;
-    default: return;
-    }
-
-    /* Inset by half a texel so tile edges cannot sample their neighbor.
-     * Image row zero maps to v=0; bottom vertices use the larger v. */
-    float u0 = (tile*TILE_SIZE + 0.5f)/texture.width;
-    float u1 = ((tile + 1)*TILE_SIZE - 0.5f)/texture.width;
-    float v0 = 0.5f/texture.height;
-    float v1 = (TILE_SIZE - 0.5f)/texture.height;
-    const Vector2 uv[4] = {{u0, v1}, {u1, v1}, {u1, v0}, {u0, v0}};
-
-    bool cutout = id == BLOCK_GLASS && renderer->cutout_shader.id;
-    if (cutout) BeginShaderMode(renderer->cutout_shader);
-    rlCheckRenderBatchLimit(24);
-    rlSetTexture(texture.id);
-    rlBegin(RL_QUADS);
-    /* White tint preserves the source colors instead of multiplying them
-     * by the prototype's LIGHTGRAY/red block colors. */
-    rlColor4ub(255, 255, 255, 255);
-    for (int face = 0; face < 6; ++face) {
-        const CubeFace *quad = &cube_faces[face];
-        rlNormal3f(quad->normal.x, quad->normal.y, quad->normal.z);
-        for (int vertex = 0; vertex < 4; ++vertex) {
-            rlTexCoord2f(uv[vertex].x, uv[vertex].y);
-            rlVertex3f(center.x + quad->vertices[vertex].x,
-                       center.y + quad->vertices[vertex].y,
-                       center.z + quad->vertices[vertex].z);
-        }
-    }
-    rlEnd();
-    rlSetTexture(0);
-    if (cutout) EndShaderMode();
-}
-
 static void wire_uv(Texture2D atlas, int tile, Vector2 uv[4])
 {
     Rectangle rectangle = wire_tile_rectangle(tile);
@@ -991,73 +938,6 @@ static int piston_head_uv(Texture2D atlas, BlockState state,
     return count;
 }
 
-static void emit_wire_face(const CubeFace *face, Vector3 center,
-                           const Vector2 uv[4], bool climbing)
-{
-    rlNormal3f(face->normal.x, face->normal.y, face->normal.z);
-    for (int vertex = 0; vertex < 4; ++vertex) {
-        Vector3 position = face->vertices[vertex];
-        /* Keep the lower wall edge just outside its support. The upper edge
-         * meets the higher wire exactly; this avoids a gap at the step. */
-        if (climbing && position.y < 0) {
-            position.x += face->normal.x*wire_offset;
-            position.z += face->normal.z*wire_offset;
-        }
-        rlTexCoord2f(uv[vertex].x, uv[vertex].y);
-        rlVertex3f(center.x + position.x, center.y + position.y,
-                   center.z + position.z);
-    }
-}
-
-void block_renderer_begin_cutouts(const BlockRenderer *renderer)
-{
-    if (renderer && renderer->cutout_shader.id)
-        BeginShaderMode(renderer->cutout_shader);
-}
-
-void block_renderer_end_cutouts(void)
-{
-    EndShaderMode();
-}
-
-void block_renderer_draw_wire(const BlockRenderer *renderer, BlockState state,
-                              Vector3 center)
-{
-    if (!renderer || !renderer->wire_atlas.id || state.id != BLOCK_REDSTONE_WIRE)
-        return;
-
-    int mask = 0;
-    for (int direction = 0; direction < 4; ++direction) {
-        if (state.data.wire.connections & (1u << wire_directions[direction]))
-            mask |= 1 << direction;
-    }
-    int power = state.data.wire.power;
-    Vector2 uv[4];
-    wire_uv(renderer->wire_atlas, power*WIRE_SHAPES + mask, uv);
-
-    rlCheckRenderBatchLimit(20);
-    rlSetTexture(renderer->wire_atlas.id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    Vector3 top = {center.x, center.y - 1.0f + wire_offset, center.z};
-    emit_wire_face(&cube_faces[4], top, uv, false);
-
-    wire_uv(renderer->wire_atlas, WIRE_SIDE_FIRST + power, uv);
-    static const int side_faces[] = {3, 2, 1, 0};
-    static const Vector3 offsets[] = {{1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1}};
-    for (int direction = 0; direction < 4; ++direction) {
-        unsigned bit = 1u << wire_directions[direction];
-        if (!(state.data.wire.up_connections & state.data.wire.connections & bit))
-            continue;
-        Vector3 side = {center.x + offsets[direction].x,
-                        center.y + wire_offset,
-                        center.z + offsets[direction].z};
-        emit_wire_face(&cube_faces[side_faces[direction]], side, uv, true);
-    }
-    rlEnd();
-    rlSetTexture(0);
-}
-
 static TorchTransform torch_transform(Vector3 center, Direction support)
 {
     TorchTransform transform = {
@@ -1107,42 +987,6 @@ static void torch_uv(Texture2D atlas, int lit, Rectangle source, Vector2 uv[4])
     uv[1] = (Vector2){u1, v1};
     uv[2] = (Vector2){u1, v0};
     uv[3] = (Vector2){u0, v0};
-}
-
-void block_renderer_draw_torch(const BlockRenderer *renderer, BlockState state,
-                               Vector3 center)
-{
-    if (!renderer || !renderer->torch_atlas.id || state.id != BLOCK_REDSTONE_TORCH)
-        return;
-
-    TorchTransform transform = torch_transform(center, (Direction)state.data.torch.support_dir);
-    int lit = state.data.torch.lit ? 1 : 0;
-    Vector2 uv[4];
-    torch_uv(renderer->torch_atlas, lit, (Rectangle){0, 0, TILE_SIZE, TILE_SIZE}, uv);
-
-    rlCheckRenderBatchLimit(24);
-    rlSetTexture(renderer->torch_atlas.id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    for (int face = 0; face < 6; ++face) {
-        if (face == 4)
-            torch_uv(renderer->torch_atlas, lit, (Rectangle){14, 7, 4, 4}, uv);
-        else if (face == 5)
-            torch_uv(renderer->torch_atlas, lit, (Rectangle){14, 28, 4, 4}, uv);
-
-        const CubeFace *quad = &torch_faces[face];
-        Vector3 normal = torch_rotate(transform, quad->normal);
-        rlNormal3f(normal.x, normal.y, normal.z);
-        for (int vertex = 0; vertex < 4; ++vertex) {
-            Vector3 position = torch_rotate(transform, quad->vertices[vertex]);
-            rlTexCoord2f(uv[vertex].x, uv[vertex].y);
-            rlVertex3f(transform.origin.x + position.x,
-                       transform.origin.y + position.y,
-                       transform.origin.z + position.z);
-        }
-    }
-    rlEnd();
-    rlSetTexture(0);
 }
 
 static void redstone_gate_top_uv(Texture2D atlas, int column, int row,
@@ -1265,78 +1109,6 @@ static void redstone_gate_geometry(
                 center.z + point.z
             };
         }
-}
-
-static void draw_redstone_gate(
-    Texture2D atlas,
-    Vector2 uv[REDSTONE_GATE_GEOMETRY_QUADS][4],
-    Vector3 center)
-{
-    Vector3 vertices[REDSTONE_GATE_GEOMETRY_QUADS][4];
-    redstone_gate_geometry(center, vertices);
-
-    rlCheckRenderBatchLimit(REDSTONE_GATE_GEOMETRY_QUADS*4);
-    rlSetTexture(atlas.id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    for (int face = 0; face < REDSTONE_GATE_GEOMETRY_QUADS; ++face) {
-        Vector3 normal = face ? cube_faces[face - 1].normal : cube_faces[4].normal;
-        rlNormal3f(normal.x, normal.y, normal.z);
-        for (int vertex = 0; vertex < 4; ++vertex) {
-            rlTexCoord2f(uv[face][vertex].x, uv[face][vertex].y);
-            rlVertex3f(vertices[face][vertex].x,
-                       vertices[face][vertex].y,
-                       vertices[face][vertex].z);
-        }
-    }
-    rlEnd();
-    rlSetTexture(0);
-}
-
-void block_renderer_draw_repeater(const BlockRenderer *renderer,
-                                  BlockState state, Vector3 center)
-{
-    if (!renderer || !renderer->repeater_atlas.id ||
-        state.id != BLOCK_REDSTONE_REPEATER) return;
-    Vector2 uv[REDSTONE_GATE_GEOMETRY_QUADS][4];
-    repeater_uv(renderer->repeater_atlas, state, uv);
-    draw_redstone_gate(renderer->repeater_atlas, uv, center);
-}
-
-void block_renderer_draw_comparator(const BlockRenderer *renderer,
-                                    BlockState state, Vector3 center)
-{
-    if (!renderer || !renderer->comparator_atlas.id ||
-        state.id != BLOCK_REDSTONE_COMPARATOR) return;
-    Vector2 uv[REDSTONE_GATE_GEOMETRY_QUADS][4];
-    comparator_uv(renderer->comparator_atlas, state, uv);
-    draw_redstone_gate(renderer->comparator_atlas, uv, center);
-}
-
-void block_renderer_draw_rail(const BlockRenderer *renderer, BlockState state,
-                              Vector3 center)
-{
-    if (!renderer || (state.id != BLOCK_POWERED_RAIL &&
-                      state.id != BLOCK_ACTIVATOR_RAIL)) return;
-    Texture2D atlas = rail_texture(renderer, (BlockId)state.id);
-    if (!atlas.id) return;
-    Vector2 uv[4];
-    Vector3 vertices[4];
-    rail_uv(atlas, state, uv);
-    rail_geometry(state, center, vertices);
-
-    rlCheckRenderBatchLimit(4);
-    rlSetTexture(atlas.id);
-    rlBegin(RL_QUADS);
-    rlColor4ub(255, 255, 255, 255);
-    rlNormal3f(0.0f, 1.0f, 0.0f);
-    for (int vertex = 0; vertex < 4; ++vertex) {
-        rlTexCoord2f(uv[vertex].x, uv[vertex].y);
-        rlVertex3f(vertices[vertex].x, vertices[vertex].y,
-                   vertices[vertex].z);
-    }
-    rlEnd();
-    rlSetTexture(0);
 }
 
 static int hopper_geometry(const BlockRenderer *renderer, BlockState state,
