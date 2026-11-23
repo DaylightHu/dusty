@@ -81,6 +81,7 @@ static void print_usage(FILE *output)
           "  dusty load NAME    Load a world and open its 3D view\n"
           "  dusty delete NAME  Permanently delete a world and its directory\n"
           "  dusty run-c DRIVER.c  Build and run a C driver from the project root\n"
+          "  dusty export-c DRIVER.c  Export the model declared in a C driver\n"
           "  dusty export-c INPUT.mcs OUTPUT.c [SYMBOL]  Export a C circuit model\n"
           "  dusty --help       Show this help\n", output);
 }
@@ -174,8 +175,13 @@ int main(int argc, char **argv)
 
     if (argc == 3 && !strcmp(argv[1], "run-c"))
         return dusty_driver(argv[2], NULL, true);
-    if ((argc == 4 || argc == 5) && !strcmp(argv[1], "export-c"))
-        return dusty_export_c(argv[2], argv[3], argc == 5 ? argv[4] : NULL);
+    if (!strcmp(argv[1], "export-c")) {
+        if (argc == 3) return dusty_export_driver(argv[2]);
+        if (argc == 4 || argc == 5)
+            return dusty_export_c(argv[2], argv[3], argc == 5 ? argv[4] : NULL);
+        print_usage(stderr);
+        return 2;
+    }
 
     /* Accept the previous world prefix for existing shell commands. */
     if (argc > 2 && !strcmp(argv[1], "world")) {
