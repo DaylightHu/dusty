@@ -80,6 +80,9 @@ static const char *gui_sources[] = {
     TOML_DIR "/tomlc17.c",
     "src/frontend/app_config.c",
     "src/dusty_main.c",
+    "src/delete_world_command.c",
+    "src/driver_command.c",
+    "src/export_c_command.c",
     "src/command_completion.c",
     "src/edit_command.c",
     "src/plot_command.c",
@@ -498,6 +501,7 @@ static bool collect_project_headers(Files *headers)
     if (!nob_walk_dir("include", collect_header, .data = headers)) return false;
     if (!nob_walk_dir("src", collect_header, .data = headers)) return false;
     files_add(headers, "nob.c");
+    files_add(headers, "nob.h");
     files_add(headers, RAYLIB_CONFIG);
     files_add(headers, TOML_DIR "/tomlc17.h");
     files_add(headers, RAYLIB_SRC "/raylib.h");
@@ -677,21 +681,21 @@ static bool compile_sources(const char **sources, size_t source_count,
     return true;
 }
 
+static bool build_core_library(void);
+
 static bool build_dusty(void)
 {
     if (!supported_platform() || !ensure_build_directories()) return false;
 
     bool result = false;
     Files headers = {0};
-    Files common_objects = {0};
     Files gui_objects = {0};
     Files raylib_objects = {0};
     Files vendor_files = {0};
     Files link_objects = {0};
 
     if (!collect_project_headers(&headers)) goto cleanup;
-    if (!compile_sources(common_sources, NOB_ARRAY_LEN(common_sources),
-                         &headers, &common_objects)) goto cleanup;
+    if (!build_core_library()) goto cleanup;
 
     if (!collect_vendor_files(&vendor_files)) goto cleanup;
     files_add(&vendor_files, RAYLIB_CONFIG);
@@ -702,8 +706,8 @@ static bool build_dusty(void)
         if (!compile_raylib_source(raylib_sources[index], &vendor_files,
                                    &raylib_objects)) goto cleanup;
     }
-    files_append(&link_objects, &common_objects);
     files_append(&link_objects, &gui_objects);
+    files_add(&link_objects, "build/libmcmux.a");
     files_append(&link_objects, &raylib_objects);
 #if defined(_WIN32)
     if (!compile_gui_icon(&link_objects)) goto cleanup;
@@ -722,7 +726,6 @@ cleanup:
     files_free(&vendor_files);
     files_free(&raylib_objects);
     files_free(&gui_objects);
-    files_free(&common_objects);
     files_free(&headers);
     return result;
 }
@@ -926,104 +929,7 @@ done:
     return ok;
 }
 
-static char *user_source_path(const char *source)
-{
-#ifdef _WIN32
-    char *absolute=_fullpath(NULL,source,0);
-#else
-    char *absolute=realpath(source,NULL);
-#endif
-    if (!absolute) {
-        nob_log(NOB_ERROR,"cannot resolve source %s: %s",source,strerror(errno));
-        return NULL;
-    }
-#ifdef _WIN32
-    for (char *p=absolute; *p; ++p) if (*p=='\\') *p='/';
-#endif
-    size_t length=strlen(absolute);
-    if (length<2 || absolute[length-2]!='.' ||
-        tolower((unsigned char)absolute[length-1])!='c' ||
-        nob_get_file_type(absolute)!=NOB_FILE_REGULAR) {
-        nob_log(NOB_ERROR,"expected a C source file: %s",source);
-        free(absolute);
-        return NULL;
-    }
-    return absolute;
-}
-
-static bool make_parent_directories(const char *path)
-{
-    char *directory=string_dup(path);
-    bool ok=true;
-    for (char *p=directory; *p; ++p) if (*p=='/') {
-        *p='\0';
-        if (!nob_mkdir_if_not_exists(directory)) { ok=false; break; }
-        *p='/';
-    }
-    free(directory);
-    return ok;
-}
-
-static bool build_user_program(const char *source,bool run)
-{
-    char *absolute=user_source_path(source);
-    if (!absolute) return false;
-    bool ok=false;
-    const char *root=nob_get_current_dir_temp();
-    if (!root) goto done;
-    size_t root_length=strlen(root);
-    if (strlen(absolute)<root_length) goto outside_project;
-    for (size_t i=0; i<root_length; ++i) {
-        unsigned char a=(unsigned char)root[i],b=(unsigned char)absolute[i];
-#ifdef _WIN32
-        if (a=='\\') a='/';
-        a=(unsigned char)tolower(a); b=(unsigned char)tolower(b);
-#endif
-        if (a!=b) goto outside_project;
-    }
-    const char *relative=absolute+root_length;
-    bool root_separator=root_length && root[root_length-1]=='/';
-#ifdef _WIN32
-    root_separator=root_separator || (root_length && root[root_length-1]=='\\');
-#endif
-    if (!root_separator) {
-        if (*relative!='/') goto outside_project;
-        ++relative;
-    }
-    if (!*relative) goto outside_project;
-    const char *stem=nob_temp_sprintf("build/programs/%.*s",(int)strlen(relative)-2,relative);
-    const char *output=nob_temp_sprintf("%s%s",stem,executable_suffix());
-    const char *temporary=nob_temp_sprintf("build/program-tmp/%.*s%s",
-        (int)strlen(relative)-2,relative,executable_suffix());
-    if (!make_parent_directories(output) || !make_parent_directories(temporary) ||
-        !build_core_library()) goto done;
-    Nob_Cmd command={0};
-    nob_cmd_append(&command,compiler(),"-std=c11","-O2","-Wall","-Wextra",
-        "-Iinclude","-x","c",absolute,"-x","none","build/libmcmux.a","-o",temporary);
-#ifndef _WIN32
-    nob_cmd_append(&command,"-lm");
-#endif
-    if (!nob_cmd_run(&command)) {
-        if (nob_file_exists(temporary)) (void)nob_delete_file(temporary);
-        goto done;
-    }
-    if (!nob_rename(temporary,output)) {
-        if (nob_file_exists(temporary)) (void)nob_delete_file(temporary);
-        goto done;
-    }
-    nob_log(NOB_INFO,"built %s",output);
-    if (run) {
-        nob_cmd_append(&command,output);
-        if (!nob_cmd_run(&command)) goto done;
-    }
-    ok=true;
-    goto done;
-outside_project:
-    nob_log(NOB_ERROR,"source must be inside the project directory: %s",source);
-done:
-    free(absolute);
-    return ok;
-}
+#include "src/driver_command.c"
 
 static bool build_headless_tool_flags(const char *source, const char *name,
                                        bool run, const char *define)
@@ -1194,17 +1100,17 @@ static void print_help(const char *program)
     printf("  benchmark    Generate C queries, compile and run the full redstone suite\n");
     printf("               --compare-modules: one-command baseline/current module comparison\n");
     printf("               --baseline REF: comparison baseline (default: HEAD)\n");
-    printf("  export-c     Export INPUT.mcs OUTPUT.c [SYMBOL] as C query code\n");
+    printf("  export-c     Compatibility entry for dusty export-c\n");
     printf("  lib          Build build/libmcmux.a (no GUI dependencies)\n");
     printf("  build-c FILE Build a user C program linked with the simulation core\n");
-    printf("  run-c FILE   Build and run a user C program from the repository root\n");
+    printf("  run-c FILE   Compatibility entry for dusty run-c\n");
     printf("  clean        Remove the build directory\n");
     printf("  help         Show this help\n");
 }
 
 int main(int argc, char **argv)
 {
-    NOB_GO_REBUILD_URSELF_PLUS(argc, argv, "nob.h");
+    NOB_GO_REBUILD_URSELF_PLUS(argc, argv, "nob.h", "src/driver_command.c", "src/dusty_commands.h");
 
     const char *program = nob_shift(argv, argc);
     const char *command = argc > 0 ? nob_shift(argv, argc) : "build";
@@ -1218,9 +1124,18 @@ int main(int argc, char **argv)
             nob_log(NOB_ERROR, "usage: %s export-c INPUT.mcs OUTPUT.c [SYMBOL]", program);
             return 1;
         }
-        if (!build_headless_tool("tools/export_c.c", "export_c", false)) return 1;
+        if (!build_core_library()) return 1;
+        const char *binary = nob_temp_sprintf("build/export_c%s", executable_suffix());
+        Nob_Cmd build = {0};
+        nob_cmd_append(&build, compiler(), "-std=c11", "-O2", "-Wall", "-Wextra",
+                       "-Iinclude", "-Isrc", "tools/export_c.c", "src/export_c_command.c",
+                       "build/libmcmux.a", "-o", binary);
+#ifndef _WIN32
+        nob_cmd_append(&build, "-lm");
+#endif
+        if (!nob_cmd_run(&build)) return 1;
         Nob_Cmd export = {0};
-        nob_cmd_append(&export, nob_temp_sprintf("build/export_c%s", executable_suffix()));
+        nob_cmd_append(&export, binary);
         for (int i = 0; i < argc; ++i) nob_cmd_append(&export, argv[i]);
         return nob_cmd_run(&export) ? 0 : 1;
     }
@@ -1230,7 +1145,8 @@ int main(int argc, char **argv)
             nob_log(NOB_ERROR,"usage: %s %s path/to/program.c",program,command);
             return 1;
         }
-        return build_user_program(argv[0],strcmp(command,"run-c")==0) ? 0 : 1;
+        if (!build_core_library()) return 1;
+        return dusty_driver(argv[0], compiler(), strcmp(command,"run-c")==0);
     }
     if (strcmp(command, "build") == 0) {
         return build_dusty() ? 0 : 1;

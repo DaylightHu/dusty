@@ -3,6 +3,7 @@
 #endif
 
 #include "frontend/gui.h"
+#include "dusty_commands.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -78,6 +79,9 @@ static void print_usage(FILE *output)
           "  dusty list         List saved worlds\n"
           "  dusty create NAME  Create a world without opening a window\n"
           "  dusty load NAME    Load a world and open its 3D view\n"
+          "  dusty delete NAME  Permanently delete a world and its directory\n"
+          "  dusty run-c DRIVER.c  Build and run a C driver from the project root\n"
+          "  dusty export-c INPUT.mcs OUTPUT.c [SYMBOL]  Export a C circuit model\n"
           "  dusty --help       Show this help\n", output);
 }
 
@@ -168,6 +172,11 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
+    if (argc == 3 && !strcmp(argv[1], "run-c"))
+        return dusty_driver(argv[2], NULL, true);
+    if ((argc == 4 || argc == 5) && !strcmp(argv[1], "export-c"))
+        return dusty_export_c(argv[2], argv[3], argc == 5 ? argv[4] : NULL);
+
     /* Accept the previous world prefix for existing shell commands. */
     if (argc > 2 && !strcmp(argv[1], "world")) {
         --argc;
@@ -176,7 +185,8 @@ int main(int argc, char **argv)
     bool list = argc == 2 && !strcmp(argv[1], "list");
     bool create = argc == 3 && !strcmp(argv[1], "create");
     bool load = argc == 3 && (!strcmp(argv[1], "load") || !strcmp(argv[1], "view"));
-    if (!list && !create && !load) {
+    bool deleting = argc == 3 && !strcmp(argv[1], "delete");
+    if (!list && !create && !load && !deleting) {
         print_usage(stderr);
         return EXIT_FAILURE;
     }
@@ -190,6 +200,7 @@ int main(int argc, char **argv)
     if (list) return list_worlds();
 
     const char *name = argv[2];
+    if (deleting) return dusty_delete_world(save_directory, name);
     char path[GAME_SESSION_PATH_CAPACITY];
     GameSessionResult result = game_session_make_path(save_directory, name, path);
     if (result != GAME_SESSION_OK) return world_error(create ? "create" : "load", name, result);

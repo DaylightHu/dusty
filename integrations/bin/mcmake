@@ -14,9 +14,21 @@ if [ -z "$project" ]; then
         fail 'Cannot locate the project directory.'
 fi
 
+run_dusty()
+{
+    case "$(uname -s)" in
+        Linux) binary=./build/linux/dusty ;;
+        Darwin) binary=./build/macos/dusty ;;
+        MINGW*|MSYS*|CYGWIN*) binary=./build/windows/dusty.exe ;;
+        *) fail 'Cannot locate Dusty for this platform.' ;;
+    esac
+    [ -x "$binary" ] || fail 'Build Dusty first with ./nob build.'
+    exec "$binary" "$@"
+}
+
 if [ "$task" = mcmodel ] && { [ "$#" -eq 2 ] || [ "$#" -eq 3 ]; }; then
     cd "$project" || exit 1
-    exec ./nob export-c "$@"
+    run_dusty export-c "$@"
 fi
 
 [ "$#" -eq 1 ] || fail "Usage: $task FILE.c"
@@ -32,7 +44,7 @@ esac
 cd "$project" || exit 1
 case "$task" in
     mcmake) exec ./nob build-c "$source" ;;
-    mcrun) exec ./nob run-c "$source" ;;
+    mcrun) run_dusty run-c "$source" ;;
     mcmodel)
         annotation=
         found=false
@@ -59,6 +71,6 @@ case "$task" in
         IFS=${IFS%_}
         set -- $annotation
         [ "$#" -eq 3 ] || fail 'Expected // mcmux-model: INPUT.mcs OUTPUT.c SYMBOL.'
-        exec ./nob export-c "$@"
+        run_dusty export-c "$@"
         ;;
 esac
