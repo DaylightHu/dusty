@@ -1,8 +1,12 @@
--- Load the mcmux commands once per embedded Neovim session.
+-- Optional commands for a user-managed Neovim session.
 local root = vim.env.MCMUX_PROJECT
-local control = tonumber(vim.env.MCMUX_RUN_FD)
-if not root or not control or vim.g.mcmux_tasks_loaded or vim.fn.has("nvim-0.10") == 0 then
+if vim.g.mcmux_tasks_loaded or vim.fn.has("nvim-0.10") == 0 then
   return
+end
+
+if not root or root == "" then
+  local script = debug.getinfo(1, "S").source:sub(2)
+  root = vim.fs.normalize(vim.fn.fnamemodify(script, ":p:h:h:h:h:h"))
 end
 
 local function source_file()
@@ -36,63 +40,8 @@ vim.api.nvim_create_user_command("McBuild", function()
 end, { desc = "Save and build the current mcmux driver" })
 
 vim.api.nvim_create_user_command("McRun", function()
-  local file = source_file()
-  vim.cmd("botright new")
-  vim.bo.bufhidden = "hide"
-  local channel = vim.api.nvim_open_term(0, {})
-  local uv = vim.uv
-  local output = uv.new_pipe(false)
-  local errors = uv.new_pipe(false)
-  local process
-  local remaining = 2
-  local status
-  local emit = vim.schedule_wrap(function(data)
-    pcall(vim.api.nvim_chan_send, channel, data)
-  end)
-  local function finish()
-    if remaining == 0 and status then
-      emit(("\n[mcmux driver exited %d]\n"):format(status))
-    end
-  end
-  local function reader(pipe)
-    return function(err, data)
-      if data then
-        emit(data)
-      else
-        pipe:close()
-        remaining = remaining - 1
-        if err then
-          emit(err .. "\n")
-        end
-        finish()
-      end
-    end
-  end
-  local environment = vim.fn.environ()
-  environment.MCMUX_RUN_FD = "3"
-  local env = {}
-  for key, value in pairs(environment) do
-    env[#env + 1] = key .. "=" .. value
-  end
-  local failure
-  process, failure = uv.spawn(task_path("mcrun"), {
-    args = { file },
-    cwd = root,
-    env = env,
-    stdio = { nil, output, errors, control },
-  }, function(code, signal)
-    status = signal == 0 and code or 128 + signal
-    process:close()
-    finish()
-  end)
-  if not process then
-    output:close()
-    errors:close()
-    error("Could not request a driver run: " .. failure)
-  end
-  output:read_start(reader(output))
-  errors:read_start(reader(errors))
-end, { desc = "Save and run the current driver through the mcmux world session" })
+  open_task({ task_path("mcrun"), source_file() })
+end, { desc = "Save and run the current mcmux driver" })
 
 vim.api.nvim_create_user_command("McModel", function(opts)
   local args = { task_path("mcmodel") }

@@ -5,11 +5,11 @@
     <key>CFBundleIdentifier</key>
     <string>com.daylighthu.mcmux</string>
     <key>CFBundleName</key>
-    <string>mcmux</string>
+    <string>Dusty</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>machinecraft_gui</string>
+    <string>dusty</string>
     <key>CFBundleIconFile</key>
     <string>mcmux.icns</string>
     <key>NSHighResolutionCapable</key>
