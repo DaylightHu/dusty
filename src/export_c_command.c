@@ -1,6 +1,7 @@
 #include "dusty_commands.h"
 #include "mcmux.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
@@ -79,4 +80,95 @@ int dusty_export_c(const char *input, const char *output, const char *symbol)
     free(temporary);
     printf("generated %s (model: %s)\n", output, symbol);
     return 0;
+}
+
+static char *skip_space(char *text)
+{
+    while (isspace((unsigned char)*text)) ++text;
+    return text;
+}
+
+static char *model_argument(char **cursor)
+{
+    char *value = skip_space(*cursor);
+    if (!*value) return NULL;
+
+    char *end = value;
+    if (*value == '"' || *value == '\'') {
+        char quote = *value++;
+        end = strchr(value, quote);
+        if (!end || end == value || (end[1] && !isspace((unsigned char)end[1])))
+            return NULL;
+    } else {
+        while (*end && !isspace((unsigned char)*end)) ++end;
+    }
+    if (*end) *end++ = '\0';
+    *cursor = end;
+    return value;
+}
+
+int dusty_export_driver(const char *driver)
+{
+    size_t length = strlen(driver);
+    if (length < 3 || driver[length - 2] != '.' ||
+        tolower((unsigned char)driver[length - 1]) != 'c') {
+        fputs("One argument must be a C driver. To export a structure, "
+              "use dusty export-c INPUT.mcs OUTPUT.c [SYMBOL].\n", stderr);
+        return 2;
+    }
+    FILE *source = fopen(driver, "r");
+    if (!source) {
+        fprintf(stderr, "Cannot read driver '%s': %s\n", driver, strerror(errno));
+        return 1;
+    }
+
+    static const char marker[] = "mcmux-model:";
+    char line[4096];
+    char annotation[sizeof line];
+    bool found = false;
+    int status = 0;
+    while (fgets(line, sizeof line, source)) {
+        char *value = skip_space(line);
+        bool is_model = false;
+        if (value[0] == '/' && value[1] == '/') {
+            value = skip_space(value + 2);
+            is_model = strncmp(value, marker, sizeof marker - 1) == 0;
+        }
+        if (!strchr(line, '\n') && !feof(source)) {
+            int next = fgetc(source);
+            if (next != '\n' && next != EOF) {
+                if (is_model) {
+                    fprintf(stderr, "%s: model declaration is too long\n", driver);
+                    status = 2;
+                    break;
+                }
+                do { next = fgetc(source); } while (next != '\n' && next != EOF);
+            }
+        }
+        if (!is_model) continue;
+        if (found) {
+            fprintf(stderr, "%s: expected only one // mcmux-model: declaration\n", driver);
+            status = 2;
+            break;
+        }
+        strcpy(annotation, value + sizeof marker - 1);
+        found = true;
+    }
+    bool read_failed = ferror(source) != 0;
+    if (fclose(source) != 0) read_failed = true;
+    if (read_failed) {
+        fprintf(stderr, "Cannot read driver '%s'\n", driver);
+        return 1;
+    }
+    if (status) return status;
+
+    char *cursor = annotation;
+    if (found) {
+        char *input = model_argument(&cursor);
+        char *output = input ? model_argument(&cursor) : NULL;
+        char *symbol = output ? model_argument(&cursor) : NULL;
+        if (symbol && !*skip_space(cursor)) return dusty_export_c(input, output, symbol);
+    }
+    fprintf(stderr, "%s: expected // mcmux-model: INPUT.mcs OUTPUT.c SYMBOL\n", driver);
+    return 2;
 }
