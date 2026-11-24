@@ -80,7 +80,7 @@ static const char *common_sources[] = {
 static const char *gui_sources[] = {
     TOML_DIR "/tomlc17.c",
     "src/frontend/app_config.c",
-    "src/dusty_main.c",
+    "src/main.c",
     "src/delete_world_command.c",
     "src/driver_command.c",
     "src/export_c_command.c",
