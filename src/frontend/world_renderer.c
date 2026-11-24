@@ -1,4 +1,5 @@
 #include "world_renderer.h"
+#include "minecraft_redstone.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include "storage.h"
@@ -159,7 +160,10 @@ static void on_change(void *context, BlockPos p, BlockState before, BlockState a
     RenderCell *cell = &region->cells[index];
     bool geometry = old_part != new_part || translucent_changed;
     bool visual = before.id != after.id;
-    if (old_part == new_part && new_part == DUST) {
+    const BlockGeometry *current_model = minecraft_redstone_geometry(r->blocks->minecraft, after);
+    if (old_part == new_part && current_model) {
+        visual = current_model != minecraft_redstone_geometry(r->blocks->minecraft, before);
+    } else if (old_part == new_part && new_part == DUST) {
         geometry = wire_sides(before) != wire_sides(after);
         visual = geometry || before.data.wire.connections != after.data.wire.connections ||
                  before.data.wire.power != after.data.wire.power;
@@ -290,7 +294,9 @@ static bool rebuild_part(WorldRenderer *r, size_t region_id, int kind)
         BlockPos p = {x,y,z};
         RenderCell *cell = &region->cells[section_index(p)];
         if (part_for(cell->state.id) != kind) continue;
-        if (cube_part(kind)) {
+        const BlockGeometry *baked = minecraft_redstone_geometry(r->blocks->minecraft, cell->state);
+        if (baked) quads += baked->quads;
+        else if (cube_part(kind)) {
             cell->solid_faces = (uint8_t)(
                 kind == GLASS ? visible_glass_faces(r,p) :
                 kind == TRANSLUCENT ? visible_translucent_faces(r,p,(BlockId)cell->state.id) :
@@ -372,7 +378,7 @@ static bool rebuild_part(WorldRenderer *r, size_t region_id, int kind)
     return true;
 }
 
-static void patch_uv(WorldRenderer *r, RenderRegion *region, uint16_t index)
+static void patch_cell(WorldRenderer *r, RenderRegion *region, uint16_t index)
 {
     RenderCell *cell = &region->cells[index];
     int kind = part_for(cell->state.id);
@@ -381,23 +387,41 @@ static void patch_uv(WorldRenderer *r, RenderRegion *region, uint16_t index)
     if (part->rebuilt || !part->mesh.texcoords) return;
     Vector2 uv[BLOCK_GEOMETRY_QUADS][4];
     BlockState state = cell->state;
-    int quads = block_renderer_build_uv(r->blocks,state,cell->solid_faces,uv);
+    const BlockGeometry *baked = minecraft_redstone_geometry(r->blocks->minecraft, state);
+    int quads = baked ? baked->quads :
+        block_renderer_build_uv(r->blocks,state,cell->solid_faces,uv);
     unsigned first = cell->first_vertex;
     unsigned end = first+(unsigned)(quads*part->vertices_per_quad);
     static const int triangles[] = {0,1,2,0,2,3};
+    float vertices[BLOCK_GEOMETRY_QUADS*6*3];
+    float *point = vertices;
+    Vector3 center = {region->origin.x+(index&15), region->origin.y+(index>>8),
+                      region->origin.z+((index>>4)&15)};
     bool changed = false;
     unsigned next = first;
     for (int face = 0; face < quads; ++face)
         for (int i = 0; i < part->vertices_per_quad; ++i) {
             int v = part->vertices_per_quad == 4 ? i : triangles[i];
+            Vector2 coord = baked ? baked->uv[face][v] : uv[face][v];
+            if (baked) {
+                Vector3 p = baked->vertices[face][v];
+                *point++ = p.x + center.x;
+                *point++ = p.y + center.y;
+                *point++ = p.z + center.z;
+            }
             float *target = &part->mesh.texcoords[next*2];
-            if (target[0] != uv[face][v].x || target[1] != uv[face][v].y) {
-                target[0] = uv[face][v].x;
-                target[1] = uv[face][v].y;
+            if (target[0] != coord.x || target[1] != coord.y) {
+                target[0] = coord.x;
+                target[1] = coord.y;
                 changed = true;
             }
             ++next;
         }
+    if (baked) {
+        int bytes = (int)((end-first)*3*sizeof(float));
+        int offset = (int)(first*3*sizeof(float));
+        UpdateMeshBuffer(part->mesh, 0, vertices, bytes, offset);
+    }
     if (!changed) return;
     if (first < part->uv_first) part->uv_first = first;
     if (end > part->uv_end) part->uv_end = end;
@@ -438,12 +462,18 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
     WorldRenderer *r = calloc(1,sizeof(*r));
     if (!r) return NULL;
     r->blocks = blocks; r->world = world; r->topology_revision = UINT64_MAX;
-    const Texture2D textures[] = {
+    Texture2D textures[] = {
         blocks->atlas, blocks->iron_texture, blocks->glass_texture, blocks->wire_atlas,
         blocks->repeater_atlas, blocks->comparator_atlas,
         blocks->powered_rail_atlas, blocks->activator_rail_atlas,
         blocks->torch_atlas, blocks->lever_atlas, blocks->atlas
     };
+    if (minecraft_redstone_has(blocks->minecraft, BLOCK_LEVER))
+        textures[LEVERS] = blocks->minecraft_atlas;
+    if (minecraft_redstone_has(blocks->minecraft, BLOCK_REDSTONE_REPEATER))
+        textures[REPEATERS] = blocks->minecraft_atlas;
+    if (minecraft_redstone_has(blocks->minecraft, BLOCK_REDSTONE_COMPARATOR))
+        textures[COMPARATORS] = blocks->minecraft_atlas;
     for (int kind = 0; kind < PARTS; ++kind) {
         r->materials[kind] = LoadMaterialDefault();
         if (!r->materials[kind].maps) { world_renderer_destroy(r); return NULL; }
@@ -501,7 +531,7 @@ bool world_renderer_sync(WorldRenderer *r)
         }
         for (size_t j = 0; j < region->pending_count; ++j) {
             uint16_t index = region->pending[j];
-            patch_uv(r,region,index); region->cells[index].pending = false;
+            patch_cell(r,region,index); region->cells[index].pending = false;
         }
         region->pending_count = 0;
         for (int kind = 0; kind < PARTS; ++kind) {

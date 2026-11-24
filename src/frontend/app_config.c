@@ -131,31 +131,53 @@ const AppSettings *app_config_current(void)
 }
 const char *app_config_error(void) { return config_error; }
 
-static bool resolve_path(void)
+static bool absolute_path(const char *path)
 {
-    const char *override=getenv("MCMUX_CONFIG");
-    if (override && *override) {
-        if (strlen(override)>=sizeof(config_path)) return fail("MCMUX_CONFIG path is too long");
-        bool absolute=override[0]=='/';
+    if (path[0] == '/') return true;
 #ifdef _WIN32
-        absolute=absolute || (override[0]=='\\' && override[1]=='\\') ||
-            (isalpha((unsigned char)override[0]) && override[1]==':' && (override[2]=='/' || override[2]=='\\'));
+    return (path[0] == '\\' && path[1] == '\\') ||
+        (isalpha((unsigned char)path[0]) && path[1] == ':' &&
+         (path[2] == '/' || path[2] == '\\'));
+#else
+    return false;
 #endif
-        if (!absolute)
-            return fail("MCMUX_CONFIG must be an absolute path");
-        memcpy(config_path,override,strlen(override)+1); return true;
-    }
-    const char *base=getenv("XDG_CONFIG_HOME"),*suffix="/mcmux/config.toml";
+}
+
+static bool default_config_path(const char *project)
+{
+    const char *base = getenv("XDG_CONFIG_HOME");
+    const char *subdirectory = "";
     if (!base || !*base) {
 #ifdef _WIN32
-        base=getenv("APPDATA");
+        base = getenv("APPDATA");
 #else
-        base=getenv("HOME"); suffix="/.config/mcmux/config.toml";
+        base = getenv("HOME");
+        subdirectory = "/.config";
 #endif
     }
-    if (!base || !*base) return fail("cannot find user configuration directory; set MCMUX_CONFIG");
-    int n=snprintf(config_path,sizeof(config_path),"%s%s",base,suffix);
-    return (n>=0 && n<(int)sizeof(config_path)) || fail("configuration path is too long");
+    if (!base || !*base) return fail("cannot find user configuration directory; set VOXILOG_CONFIG");
+    int length = snprintf(config_path, sizeof(config_path), "%s%s/%s/config.toml",
+                          base, subdirectory, project);
+    return (length >= 0 && (size_t)length < sizeof(config_path)) ||
+           fail("configuration path is too long");
+}
+
+static bool resolve_path(bool *use_legacy_default)
+{
+    const char *variable = "VOXILOG_CONFIG";
+    const char *override = getenv(variable);
+    if (!override || !*override) {
+        variable = "MCMUX_CONFIG";
+        override = getenv(variable);
+    }
+    *use_legacy_default = !override || !*override;
+    if (*use_legacy_default) return default_config_path("voxilog");
+
+    size_t length = strlen(override);
+    if (length >= sizeof(config_path)) return fail("%s path is too long", variable);
+    if (!absolute_path(override)) return fail("%s must be an absolute path", variable);
+    memcpy(config_path, override, length + 1);
+    return true;
 }
 static bool config_value_error(const char *name,toml_datum_t value,const char *reason)
 {
@@ -189,11 +211,12 @@ static bool number(toml_datum_t root,const char *name,double low,double high,dou
 static bool read_settings(Config *next,toml_datum_t root)
 {
     /* Accept obsolete tables so existing configuration files still load. */
-    if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys ")) return false;
+    if (!allowed_table(root,"config"," window  editor  output  terminal  input  world  workspace  keys  assets ")) return false;
     static const struct { const char *table,*allowed; } fields[] = {
         {"window"," vsync  fps_limit  msaa_samples  fov "},
         {"input"," mouse_sensitivity  move_speed  scroll_lines "},
-        {"world"," stream_radius "}
+        {"world"," stream_radius "},
+        {"assets"," resource_pack "}
     };
     for (size_t i=0;i<sizeof(fields)/sizeof(fields[0]);++i)
         if (!allowed_table(toml_seek(root,fields[i].table),fields[i].table,fields[i].allowed)) return false;
@@ -214,6 +237,14 @@ static bool read_settings(Config *next,toml_datum_t root)
     if (v.type!=TOML_UNKNOWN) {
         if (v.type!=TOML_BOOLEAN) return config_value_error("window.vsync",v,"expected true or false");
         s->vsync=v.u.boolean;
+    }
+    v = toml_seek(root, "assets.resource_pack");
+    if (v.type != TOML_UNKNOWN) {
+        if (!binding_string(v) || (size_t)v.u.str.len >= sizeof(s->resource_pack) ||
+            !absolute_path(v.u.s))
+            return config_value_error("assets.resource_pack", v,
+                                      "expected an absolute path to a client JAR or resource pack ZIP");
+        memcpy(s->resource_pack, v.u.s, (size_t)v.u.str.len + 1);
     }
     return true;
 }
@@ -267,9 +298,13 @@ static bool read_bindings(Config *next,toml_datum_t root)
     }
     return true;
 }
-static bool read_config(void)
+static bool read_config(bool use_legacy_default)
 {
     FILE *file=fopen(config_path,"rb");
+    if (!file && errno == ENOENT && use_legacy_default) {
+        if (!default_config_path("mcmux")) return false;
+        file = fopen(config_path, "rb");
+    }
     Config next; defaults(&next);
     if (!file) {
         if (errno==ENOENT) return true;
@@ -294,7 +329,8 @@ static bool read_config(void)
 bool app_config_init(void)
 {
     defaults(&current); ready=true; config_path[0]='\0'; config_error[0]='\0';
-    return resolve_path() && read_config();
+    bool use_legacy_default;
+    return resolve_path(&use_legacy_default) && read_config(use_legacy_default);
 }
 void app_input_frame(void)
 {

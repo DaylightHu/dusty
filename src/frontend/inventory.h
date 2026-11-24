@@ -1,7 +1,7 @@
 #ifndef MC_INVENTORY_H
 #define MC_INVENTORY_H
 
-#include "raylib.h"
+#include "resource_pack.h"
 #include "rs/block.h"
 #include "rs/item.h"
 
@@ -35,7 +35,7 @@ typedef struct {
     int count;
 } Inventory;
 
-bool inventory_init(Inventory *inventory);
+bool inventory_init(Inventory *inventory, const ResourcePack *pack);
 void inventory_unload(Inventory *inventory);
 InventorySlot inventory_update(const Inventory *inventory);
 const char *inventory_slot_name(InventorySlot slot);

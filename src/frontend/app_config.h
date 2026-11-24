@@ -7,6 +7,7 @@ typedef struct {
     bool vsync;
     int fps_limit, msaa_samples, stream_radius;
     float fov, mouse_sensitivity, move_speed;
+    char resource_pack[4096];
 } AppSettings;
 
 bool app_config_init(void);

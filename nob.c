@@ -21,6 +21,7 @@
 #define RAYLIB_DIR "third_party/raylib"
 #define RAYLIB_SRC RAYLIB_DIR "/src"
 #define TOML_DIR "third_party/tomlc17"
+#define JSMN_HEADER "third_party/jsmn/jsmn.h"
 #define RAYLIB_CONFIG "raylib_config.h"
 #define VOXI_EXECUTABLE "voxi"
 #define MAC_APP "build/macos/Voxilog.app"
@@ -80,6 +81,10 @@ static const char *common_sources[] = {
 static const char *gui_sources[] = {
     TOML_DIR "/tomlc17.c",
     "src/frontend/app_config.c",
+    "src/frontend/resource_pack.c",
+    "src/frontend/minecraft_model.c",
+    "src/frontend/minecraft_redstone.c",
+    "src/frontend/minecraft_item.c",
     "src/main.c",
     "src/delete_world_command.c",
     "src/driver_command.c",
@@ -505,6 +510,7 @@ static bool collect_project_headers(Files *headers)
     files_add(headers, "nob.h");
     files_add(headers, RAYLIB_CONFIG);
     files_add(headers, TOML_DIR "/tomlc17.h");
+    files_add(headers, JSMN_HEADER);
     files_add(headers, RAYLIB_SRC "/raylib.h");
     files_add(headers, RAYLIB_SRC "/raymath.h");
     files_add(headers, RAYLIB_SRC "/rlgl.h");
