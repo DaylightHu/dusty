@@ -1356,11 +1356,21 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
     SetExitKey(KEY_NULL);
     SetTargetFPS(settings->fps_limit);
     if (!ui_font_init()) return false;
-    if (!block_renderer_init(&app->blocks)) {
+    ResourcePack *pack = resource_pack_open(settings->resource_pack);
+    if (pack)
+        TraceLog(LOG_INFO, "BLOCK TEXTURE: Using Minecraft textures from '%s'",
+                 settings->resource_pack);
+    else if (*settings->resource_pack)
+        fprintf(stderr, "Cannot read Minecraft textures from '%s'; using bundled textures\n",
+                settings->resource_pack);
+    bool block_textures_ready = block_renderer_init(&app->blocks, pack);
+    bool inventory_ready = block_textures_ready && inventory_init(&app->inventory, pack);
+    resource_pack_close(pack);
+    if (!block_textures_ready) {
         fprintf(stderr, "Cannot load block textures; run from the project root\n");
         return false;
     }
-    if (!inventory_init(&app->inventory)) {
+    if (!inventory_ready) {
         fprintf(stderr, "Cannot load inventory textures; run from the project root\n");
         return false;
     }

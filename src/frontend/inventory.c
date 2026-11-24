@@ -57,6 +57,28 @@ static const BlockTexture block_textures[] = {
     {BLOCK_LEVER, "res/textures/block/lever0.png"}
 };
 
+static const char *const minecraft_icons[BLOCK_COUNT] = {
+    [BLOCK_IRON] = "block/iron_block.png",
+    [BLOCK_BLUE_CONCRETE] = "block/blue_concrete.png",
+    [BLOCK_GRAY_CONCRETE] = "block/gray_concrete.png",
+    [BLOCK_GREEN_CONCRETE] = "block/green_concrete.png",
+    [BLOCK_PURPLE_CONCRETE] = "block/purple_concrete.png",
+    [BLOCK_YELLOW_CONCRETE] = "block/yellow_concrete.png",
+    [BLOCK_GLASS] = "block/glass.png",
+    [BLOCK_REDSTONE_BLOCK] = "block/redstone_block.png",
+    [BLOCK_REDSTONE_WIRE] = "item/redstone.png",
+    [BLOCK_REDSTONE_TORCH] = "block/redstone_torch.png",
+    [BLOCK_REDSTONE_REPEATER] = "item/repeater.png",
+    [BLOCK_REDSTONE_COMPARATOR] = "item/comparator.png",
+    [BLOCK_HOPPER] = "item/hopper.png"
+};
+
+static Image load_icon(const ResourcePack *pack, const char *minecraft, const char *bundled)
+{
+    Image image = resource_pack_image(pack, minecraft);
+    return image.data ? image : LoadImage(gui_asset_path(bundled));
+}
+
 static InventoryLayout inventory_layout(void)
 {
     const int grid_width =
@@ -97,7 +119,7 @@ static Rectangle inventory_slot_rectangle(InventoryLayout layout, int index)
     };
 }
 
-bool inventory_init(Inventory *inventory)
+bool inventory_init(Inventory *inventory, const ResourcePack *pack)
 {
     if (!inventory) return false;
     *inventory = (Inventory){0};
@@ -111,7 +133,9 @@ bool inventory_init(Inventory *inventory)
 
     for (size_t index = 0; index < count; ++index) {
         BlockTexture item = block_textures[index];
-        Texture2D texture = LoadTexture(gui_asset_path(item.path));
+        Image icon = load_icon(pack, minecraft_icons[item.id], item.path);
+        Texture2D texture = LoadTextureFromImage(icon);
+        if (icon.data) UnloadImage(icon);
         if (!texture.id) {
             TraceLog(LOG_ERROR, "INVENTORY: Cannot load %s", item.path);
             inventory_unload(inventory);
@@ -123,7 +147,8 @@ bool inventory_init(Inventory *inventory)
             .kind = INVENTORY_BLOCK, .block = item.id
         };
     }
-    Image potato = LoadImage(gui_asset_path("res/textures/item/poisonous_potato.png"));
+    Image potato = load_icon(pack, "item/poisonous_potato.png",
+                             "res/textures/item/poisonous_potato.png");
     if (!potato.data) {
         inventory_unload(inventory);
         return false;
@@ -142,7 +167,7 @@ bool inventory_init(Inventory *inventory)
         .stack = {ITEM_POISONOUS_POTATO, 1,
                   item_stack_limit(ITEM_POISONOUS_POTATO)}
     };
-    Image axe = LoadImage(gui_asset_path("res/textures/item/wooden_axe.png"));
+    Image axe = load_icon(pack, "item/wooden_axe.png", "res/textures/item/wooden_axe.png");
     if (!axe.data) { inventory_unload(inventory); return false; }
     ImageAlphaCrop(&axe, 0.0f);
     texture = LoadTextureFromImage(axe);

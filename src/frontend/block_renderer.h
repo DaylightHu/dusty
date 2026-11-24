@@ -1,7 +1,7 @@
 #ifndef MC_BLOCK_RENDERER_H
 #define MC_BLOCK_RENDERER_H
 
-#include "raylib.h"
+#include "resource_pack.h"
 #include "rs/block.h"
 
 typedef struct{
@@ -28,7 +28,7 @@ typedef struct {
     int quads;
 } BlockGeometry;
 
-bool block_renderer_init(BlockRenderer *renderer);
+bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack);
 void block_renderer_unload(BlockRenderer *renderer);
 
 /* CPU geometry for persistent meshes. Solid face bits follow the renderer's

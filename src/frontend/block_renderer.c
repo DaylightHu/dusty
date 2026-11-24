@@ -146,56 +146,86 @@ static Image load_tile(const char *path)
     return image;
 }
 
-static Image create_solid_atlas(void)
+static Image load_pack_tile(const ResourcePack *pack, const char *path)
 {
-    static const char *const paths[TILE_COUNT] = {
-        "res/textures/block/redstone_block.png",
-        "res/textures/block/observer_back0.png",
-        "res/textures/block/observer_front0.png",
-        "res/textures/block/observer_side0.png",
-        "res/textures/block/observer_top0.png",
-        "res/textures/block/observer_back1.png",
-        "res/textures/block/observer_front1.png",
-        "res/textures/block/observer_side1.png",
-        "res/textures/block/observer_top1.png",
-        "res/textures/block/piston_bottom0.png",
-        "res/textures/block/piston_bottom1.png",
-        "res/textures/block/piston_side0.png",
-        "res/textures/block/piston_side1.png",
-        "res/textures/block/piston_top.png",
-        "res/textures/block/sticky_piston_bottom0.png",
-        "res/textures/block/sticky_piston_bottom1.png",
-        "res/textures/block/sticky_piston_side0.png",
-        "res/textures/block/sticky_piston_side1.png",
-        "res/textures/block/sticky_piston_top.png",
-        "res/textures/block/barrel_side.png",
-        "res/textures/block/barrel_top.png",
-        "res/textures/block/barrel_top_open.png",
-        "res/textures/block/slime_block.png",
-        "res/textures/block/note_block.png",
-        "res/textures/block/honey_block.png",
-        "res/textures/block/target_block.png",
-        "res/textures/block/hopper_outside.png",
-        "res/textures/block/hopper_inside.png",
-        "res/textures/block/dropper_front.png",
-        "res/textures/block/dropper_back0.png",
-        "res/textures/block/dropper_back1.png",
-        "res/textures/block/dropper_side0.png",
-        "res/textures/block/dropper_side1.png",
-        "res/textures/block/redstone_lamp0.png",
-        "res/textures/block/redstone_lamp1.png",
-        "res/textures/block/blue_concrete.png",
-        "res/textures/block/gray_concrete.png",
-        "res/textures/block/green_concrete.png",
-        "res/textures/block/purple_concrete.png",
-        "res/textures/block/yellow_concrete.png"
+    Image image = resource_pack_image(pack, path);
+    if (!image.data) return image;
+    /* Animated block PNGs stack square frames vertically. Use the first frame. */
+    if (image.height > image.width && image.height % image.width == 0)
+        ImageCrop(&image, (Rectangle){0, 0, image.width, image.width});
+    if (image.width != image.height) {
+        UnloadImage(image);
+        return (Image){0};
+    }
+    if (image.width != TILE_SIZE) ImageResizeNN(&image, TILE_SIZE, TILE_SIZE);
+    return image;
+}
+
+static Image load_mapped_tile(const ResourcePack *pack, const char *bundled,
+                              const char *minecraft, int quarter_turn)
+{
+    Image image = load_pack_tile(pack, minecraft);
+    if (!image.data) return load_tile(bundled);
+    if (quarter_turn > 0) ImageRotateCW(&image);
+    if (quarter_turn < 0) ImageRotateCCW(&image);
+    return image;
+}
+
+static Image create_solid_atlas(const ResourcePack *pack)
+{
+    static const struct {
+        const char *bundled, *minecraft;
+        int quarter_turn;
+    } tiles[] = {
+        {"res/textures/block/redstone_block.png", "block/redstone_block.png", 0},
+        {"res/textures/block/observer_back0.png", "block/observer_back.png", 0},
+        {"res/textures/block/observer_front0.png", "block/observer_front.png", 0},
+        {"res/textures/block/observer_side0.png", "block/observer_side.png", 1},
+        {"res/textures/block/observer_top0.png", "block/observer_top.png", 0},
+        {"res/textures/block/observer_back1.png", "block/observer_back_on.png", 0},
+        {"res/textures/block/observer_front1.png", "block/observer_front.png", 0},
+        {"res/textures/block/observer_side1.png", "block/observer_side.png", 1},
+        {"res/textures/block/observer_top1.png", "block/observer_top.png", 0},
+        {"res/textures/block/piston_bottom0.png", "block/piston_bottom.png", 0},
+        {"res/textures/block/piston_bottom1.png", "block/piston_bottom.png", 0},
+        {"res/textures/block/piston_side0.png", "block/piston_side.png", 1},
+        {"res/textures/block/piston_side1.png", "block/piston_side.png", 1},
+        {"res/textures/block/piston_top.png", "block/piston_top.png", 0},
+        {"res/textures/block/sticky_piston_bottom0.png", "block/piston_bottom.png", 0},
+        {"res/textures/block/sticky_piston_bottom1.png", "block/piston_bottom.png", 0},
+        {"res/textures/block/sticky_piston_side0.png", "block/piston_side.png", 1},
+        {"res/textures/block/sticky_piston_side1.png", "block/piston_side.png", 1},
+        {"res/textures/block/sticky_piston_top.png", "block/piston_top_sticky.png", 0},
+        {"res/textures/block/barrel_side.png", "block/barrel_side.png", -1},
+        {"res/textures/block/barrel_top.png", "block/barrel_top.png", 0},
+        {"res/textures/block/barrel_top_open.png", "block/barrel_top_open.png", 0},
+        {"res/textures/block/slime_block.png", "block/slime_block.png", 0},
+        {"res/textures/block/note_block.png", "block/note_block.png", 0},
+        {"res/textures/block/honey_block.png", "block/honey_block_side.png", 0},
+        {"res/textures/block/target_block.png", "block/target_side.png", 0},
+        {"res/textures/block/hopper_outside.png", "block/hopper_outside.png", 0},
+        {"res/textures/block/hopper_inside.png", "block/hopper_inside.png", 0},
+        {"res/textures/block/dropper_front.png", "block/dropper_front.png", 0},
+        {"res/textures/block/dropper_back0.png", "block/furnace_side.png", 0},
+        {"res/textures/block/dropper_back1.png", "block/furnace_side.png", 0},
+        {"res/textures/block/dropper_side0.png", "block/furnace_side.png", 1},
+        {"res/textures/block/dropper_side1.png", "block/furnace_side.png", 1},
+        {"res/textures/block/redstone_lamp0.png", "block/redstone_lamp.png", 0},
+        {"res/textures/block/redstone_lamp1.png", "block/redstone_lamp_on.png", 0},
+        {"res/textures/block/blue_concrete.png", "block/blue_concrete.png", 0},
+        {"res/textures/block/gray_concrete.png", "block/gray_concrete.png", 0},
+        {"res/textures/block/green_concrete.png", "block/green_concrete.png", 0},
+        {"res/textures/block/purple_concrete.png", "block/purple_concrete.png", 0},
+        {"res/textures/block/yellow_concrete.png", "block/yellow_concrete.png", 0},
     };
+    _Static_assert(sizeof(tiles)/sizeof(*tiles) == TILE_COUNT, "solid atlas tile count");
     Image sources[TILE_COUNT] = {0};
     Image atlas = {0};
     Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
 
     for (int tile = 0; tile < TILE_COUNT; ++tile) {
-        sources[tile] = load_tile(paths[tile]);
+        sources[tile] = load_mapped_tile(pack, tiles[tile].bundled,
+                                         tiles[tile].minecraft, tiles[tile].quarter_turn);
         if (!sources[tile].data) goto cleanup;
     }
     atlas = GenImageColor(TILE_COUNT*TILE_SIZE, TILE_SIZE, BLANK);
@@ -251,7 +281,7 @@ static bool wire_mask(Image *image)
     return true;
 }
 
-static Image create_wire_atlas(void)
+static Image create_wire_atlas(const ResourcePack *pack)
 {
     static const char *const paths[] = {
         "res/textures/block/redstone_dot0.png",
@@ -264,24 +294,35 @@ static Image create_wire_atlas(void)
     static const int clockwise_turns[] = {3, 1, 0, 2};
     Image sources[4] = {0};
     Image arms[4] = {0};
+    Image dot = load_pack_tile(pack, "block/redstone_dust_dot.png");
+    Image line = load_pack_tile(pack, "block/redstone_dust_line0.png");
+    Image pack_arm = {0};
+    bool pack_wire = dot.data && line.data;
     Image atlas = {0};
     Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
     bool complete = false;
 
-    for (int index = 0; index < 4; ++index) {
-        sources[index] = load_tile(paths[index]);
-        if (!sources[index].data) goto cleanup;
-        if ((index & 1) && !wire_mask(&sources[index])) goto cleanup;
+    if (pack_wire) {
+        Rectangle half = {0, TILE_SIZE/2, TILE_SIZE, TILE_SIZE/2};
+        pack_arm = GenImageColor(TILE_SIZE, TILE_SIZE, BLANK);
+        if (!pack_arm.data) goto cleanup;
+        ImageDraw(&pack_arm, line, half, half, WHITE);
+    } else {
+        for (int index = 0; index < 4; ++index) {
+            sources[index] = load_tile(paths[index]);
+            if (!sources[index].data) goto cleanup;
+            if ((index & 1) && !wire_mask(&sources[index])) goto cleanup;
+        }
     }
     atlas = GenImageColor(WIRE_COLUMNS*TILE_SIZE, WIRE_ROWS*TILE_SIZE, BLANK);
     if (!atlas.data) goto cleanup;
 
     for (int power = 0; power < WIRE_STATES; ++power) {
         int powered = power > 0;
-        /* Keep the authored unpowered texture; tint the neutral powered mask. */
-        Color tint = powered ? wire_color(power) : WHITE;
+        /* Minecraft's neutral sprites are tinted at every power level. */
+        Color tint = pack_wire || powered ? wire_color(power) : WHITE;
         for (int direction = 0; direction < 4; ++direction) {
-            arms[direction] = ImageCopy(sources[2 + powered]);
+            arms[direction] = ImageCopy(pack_wire ? pack_arm : sources[2 + powered]);
             if (!arms[direction].data) goto cleanup;
             for (int turn = 0; turn < clockwise_turns[direction]; ++turn)
                 ImageRotateCW(&arms[direction]);
@@ -295,13 +336,17 @@ static Image create_wire_atlas(void)
             /* Opposite pairs form straight lines without a center dot. */
             bool straight = (mask == 3 || mask == 12);
             if (!straight)
-                ImageDraw(&atlas, sources[powered], full, destination, tint);
+                ImageDraw(&atlas, pack_wire ? dot : sources[powered],
+                          full, destination, tint);
         }
 
         /* Climbing strips use a full line without a dot in the middle. */
         Rectangle side = wire_tile_rectangle(WIRE_SIDE_FIRST + power);
-        ImageDraw(&atlas, arms[2], full, side, tint);
-        ImageDraw(&atlas, arms[3], full, side, tint);
+        if (pack_wire) ImageDraw(&atlas, line, full, side, tint);
+        else {
+            ImageDraw(&atlas, arms[2], full, side, tint);
+            ImageDraw(&atlas, arms[3], full, side, tint);
+        }
         for (int direction = 0; direction < 4; ++direction) {
             UnloadImage(arms[direction]);
             arms[direction] = (Image){0};
@@ -310,6 +355,9 @@ static Image create_wire_atlas(void)
     complete = true;
 
 cleanup:
+    if (dot.data) UnloadImage(dot);
+    if (line.data) UnloadImage(line);
+    if (pack_arm.data) UnloadImage(pack_arm);
     for (int index = 0; index < 4; ++index) {
         if (sources[index].data) UnloadImage(sources[index]);
         if (arms[index].data) UnloadImage(arms[index]);
@@ -321,16 +369,19 @@ cleanup:
     return atlas;
 }
 
-static Image create_torch_atlas(void)
+static Image create_torch_atlas(const ResourcePack *pack)
 {
     static const char *const paths[] = {
         "res/textures/block/redstone_torch0.png", 
         "res/textures/block/redstone_torch1.png"
     };
+    static const char *const minecraft[] = {
+        "block/redstone_torch_off.png", "block/redstone_torch.png"
+    };
     Image sources[2] = {0};
     Image atlas = {0};
     for (int lit = 0; lit < 2; ++lit) {
-        sources[lit] = load_tile(paths[lit]);
+        sources[lit] = load_mapped_tile(pack, paths[lit], minecraft[lit], 0);
         if (!sources[lit].data) goto cleanup;
     }
 
@@ -439,16 +490,18 @@ cleanup:
     return atlas;
 }
 
-static Image create_two_state_atlas(const char *unpowered_path,
-                                    const char *powered_path)
+static Image create_two_state_atlas(const ResourcePack *pack,
+                                    const char *unpowered_path, const char *powered_path,
+                                    const char *minecraft_off, const char *minecraft_on)
 {
     const char *const paths[RAIL_STATES] = {
         unpowered_path, powered_path
     };
+    const char *const minecraft[RAIL_STATES] = {minecraft_off, minecraft_on};
     Image sources[RAIL_STATES] = {0};
     Image atlas = {0};
     for (int powered = 0; powered < RAIL_STATES; ++powered) {
-        sources[powered] = load_tile(paths[powered]);
+        sources[powered] = load_mapped_tile(pack, paths[powered], minecraft[powered], 0);
         if (!sources[powered].data) goto cleanup;
     }
 
@@ -469,12 +522,12 @@ cleanup:
     return atlas;
 }
 
-bool block_renderer_init(BlockRenderer *renderer)
+bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
 {
     if (!renderer) return false;
     *renderer = (BlockRenderer){0};
 
-    Image atlas = create_solid_atlas();
+    Image atlas = create_solid_atlas(pack);
     if (atlas.data) {
         renderer->atlas = LoadTextureFromImage(atlas);
         UnloadImage(atlas);
@@ -488,7 +541,8 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureFilter(renderer->atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->atlas, TEXTURE_WRAP_CLAMP);
 
-    Image iron = load_tile("res/textures/block/white_concrete.png");
+    Image iron = load_mapped_tile(pack, "res/textures/block/white_concrete.png",
+                                  "block/iron_block.png", 0);
     if (iron.data) {
         renderer->iron_texture = LoadTextureFromImage(iron);
         UnloadImage(iron);
@@ -514,7 +568,8 @@ bool block_renderer_init(BlockRenderer *renderer)
                                 (int)(maximum < 8.0f ? maximum : 8.0f));
     }
 
-    Image glass = load_tile("res/textures/block/glass.png");
+    Image glass = load_mapped_tile(pack, "res/textures/block/glass.png",
+                                   "block/glass.png", 0);
     if (glass.data) {
         renderer->glass_texture = LoadTextureFromImage(glass);
         UnloadImage(glass);
@@ -527,7 +582,7 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureFilter(renderer->glass_texture, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->glass_texture, TEXTURE_WRAP_CLAMP);
 
-    Image wire_atlas = create_wire_atlas();
+    Image wire_atlas = create_wire_atlas(pack);
     if (wire_atlas.data) {
         renderer->wire_atlas = LoadTextureFromImage(wire_atlas);
         UnloadImage(wire_atlas);
@@ -540,7 +595,7 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureFilter(renderer->wire_atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->wire_atlas, TEXTURE_WRAP_CLAMP);
 
-    Image torch_atlas = create_torch_atlas();
+    Image torch_atlas = create_torch_atlas(pack);
     if (torch_atlas.data) {
         renderer->torch_atlas = LoadTextureFromImage(torch_atlas);
         UnloadImage(torch_atlas);
@@ -553,6 +608,7 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureFilter(renderer->torch_atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->torch_atlas, TEXTURE_WRAP_CLAMP);
 
+    /* These atlases already combine the gate plate and its torches. */
     Image repeater_atlas = create_repeater_atlas();
     if (repeater_atlas.data) {
         renderer->repeater_atlas = LoadTextureFromImage(repeater_atlas);
@@ -580,8 +636,10 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureWrap(renderer->comparator_atlas, TEXTURE_WRAP_CLAMP);
 
     Image powered_rail_atlas = create_two_state_atlas(
+        pack,
         "res/textures/block/powered_rail0.png",
-        "res/textures/block/powered_rail1.png");
+        "res/textures/block/powered_rail1.png",
+        "block/powered_rail.png", "block/powered_rail_on.png");
     if (powered_rail_atlas.data) {
         renderer->powered_rail_atlas = LoadTextureFromImage(powered_rail_atlas);
         UnloadImage(powered_rail_atlas);
@@ -595,8 +653,10 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureWrap(renderer->powered_rail_atlas, TEXTURE_WRAP_CLAMP);
 
     Image activator_rail_atlas = create_two_state_atlas(
+        pack,
         "res/textures/block/activator_rail0.png",
-        "res/textures/block/activator_rail1.png");
+        "res/textures/block/activator_rail1.png",
+        "block/activator_rail.png", "block/activator_rail_on.png");
     if (activator_rail_atlas.data) {
         renderer->activator_rail_atlas = LoadTextureFromImage(activator_rail_atlas);
         UnloadImage(activator_rail_atlas);
@@ -610,8 +670,10 @@ bool block_renderer_init(BlockRenderer *renderer)
     SetTextureWrap(renderer->activator_rail_atlas, TEXTURE_WRAP_CLAMP);
 
     Image lever_atlas = create_two_state_atlas(
+        NULL,
         "res/textures/block/lever0.png",
-        "res/textures/block/lever1.png");
+        "res/textures/block/lever1.png",
+        NULL, NULL);
     if (lever_atlas.data) {
         renderer->lever_atlas = LoadTextureFromImage(lever_atlas);
         UnloadImage(lever_atlas);
