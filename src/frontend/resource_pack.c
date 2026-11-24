@@ -15,7 +15,7 @@ enum {
     ZIP_DEFLATED = 8,
     ZIP_ENCRYPTED = (1u << 0) | (1u << 6) | (1u << 13),
     DIRECTORY_LIMIT = 16*1024*1024,
-    JSON_BYTES_LIMIT = 64*1024,
+    SMALL_ASSET_BYTES_LIMIT = 64*1024,
     TEXTURE_BYTES_LIMIT = 8*1024*1024,
     TEXTURE_DIMENSION_LIMIT = 2048
 };
@@ -210,10 +210,15 @@ Image resource_pack_image(const ResourcePack *pack, const char *path)
     return image;
 }
 
+unsigned char *resource_pack_bytes(const ResourcePack *pack, const char *path, int *size)
+{
+    return read_asset(pack, asset_prefix, path, SMALL_ASSET_BYTES_LIMIT, size);
+}
+
 char *resource_pack_json(const ResourcePack *pack, const char *path)
 {
     int size;
-    unsigned char *bytes = read_asset(pack, asset_prefix, path, JSON_BYTES_LIMIT, &size);
+    unsigned char *bytes = resource_pack_bytes(pack, path, &size);
     if (bytes && memchr(bytes, 0, (size_t)size)) {
         free(bytes);
         return NULL;

@@ -76,6 +76,7 @@ typedef struct {
     BlockRenderer blocks;
     Inventory inventory;
     Hotbar hotbar;
+    ResourcePack *resource_pack;
     GameSession *session;
     WorldRenderer *world_renderer;
     Camera3D camera;
@@ -1357,8 +1358,7 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
     SetWindowMinSize(1000, 650);
     SetExitKey(KEY_NULL);
     SetTargetFPS(settings->fps_limit);
-    if (!ui_font_init()) return false;
-    ResourcePack *pack = resource_pack_open(settings->resource_pack);
+    ResourcePack *pack = app->resource_pack = resource_pack_open(settings->resource_pack);
     /* Java Edition plains sky tint at full daylight. */
     app->sky_color = pack ? (Color){120, 167, 255, 255} : (Color){184, 211, 214, 255};
     if (pack)
@@ -1367,9 +1367,9 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
     else if (*settings->resource_pack)
         fprintf(stderr, "Cannot read Minecraft textures from '%s'; using bundled textures\n",
                 settings->resource_pack);
+    if (!ui_font_init(pack)) return false;
     bool block_textures_ready = block_renderer_init(&app->blocks, pack);
     bool inventory_ready = block_textures_ready && inventory_init(&app->inventory, pack);
-    resource_pack_close(pack);
     if (!block_textures_ready) {
         fprintf(stderr, "Cannot load block textures; run from the project root\n");
         return false;
@@ -1403,6 +1403,7 @@ static void shutdown_gui(GuiApp *app)
     inventory_unload(&app->inventory);
     block_renderer_unload(&app->blocks);
     ui_font_unload();
+    resource_pack_close(app->resource_pack);
     CloseWindow();
 }
 

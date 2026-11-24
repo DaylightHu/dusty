@@ -67,14 +67,13 @@ clang -std=c11 -O2 nob.c -o nob.exe
 
 Add the directory containing `voxi` to your `PATH`.
 
-## Local Minecraft textures
+## Local Minecraft assets
 
-Set the absolute path to a local Minecraft 1.16.2 JAR or resource-pack ZIP in
-`~/.config/voxilog/config.toml` (`%APPDATA%/voxilog/config.toml` on Windows).
+To use local Minecraft textures and fonts, set the absolute path to a 1.16.2 JAR or resource-pack ZIP in `~/.config/voxilog/config.toml` (`%APPDATA%/voxilog/config.toml` on Windows).
 
 ```toml
 [assets]
-resource_pack = 'yourpath/.minecraft/versions/1.16.2/1.16.2.jar'
+resource_pack = '/path/to/1.16.2.jar'
 ```
 
 ## Placement hotkeys
