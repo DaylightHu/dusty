@@ -74,16 +74,16 @@ static const char save_directory[] = "saves";
 
 static void print_usage(FILE *output)
 {
-    fputs("Dusty - redstone circuit workbench\n"
+    fputs("Voxilog - redstone circuit workbench\n"
           "Usage:\n"
-          "  dusty list         List saved worlds\n"
-          "  dusty create NAME  Create a world without opening a window\n"
-          "  dusty load NAME    Load a world and open its 3D view\n"
-          "  dusty delete NAME  Permanently delete a world and its directory\n"
-          "  dusty run-c DRIVER.c  Build and run a C driver from the project root\n"
-          "  dusty export-c DRIVER.c  Export the model declared in a C driver\n"
-          "  dusty export-c INPUT.mcs OUTPUT.c [SYMBOL]  Export a C circuit model\n"
-          "  dusty --help       Show this help\n", output);
+          "  voxi list         List saved worlds\n"
+          "  voxi create NAME  Create a world without opening a window\n"
+          "  voxi load NAME    Load a world and open its 3D view\n"
+          "  voxi delete NAME  Permanently delete a world and its directory\n"
+          "  voxi run-c DRIVER.c  Build and run a C driver from the project root\n"
+          "  voxi export-c DRIVER.c  Export the model declared in a C driver\n"
+          "  voxi export-c INPUT.mcs OUTPUT.c [SYMBOL]  Export a C circuit model\n"
+          "  voxi --help       Show this help\n", output);
 }
 
 static int world_error(const char *action, const char *name, GameSessionResult result)
