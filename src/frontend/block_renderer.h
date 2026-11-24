@@ -4,6 +4,8 @@
 #include "resource_pack.h"
 #include "rs/block.h"
 
+typedef struct MinecraftRedstone MinecraftRedstone;
+
 typedef struct{
     Texture2D atlas;
     Texture2D iron_texture;
@@ -15,6 +17,8 @@ typedef struct{
     Texture2D powered_rail_atlas;
     Texture2D activator_rail_atlas;
     Texture2D lever_atlas;
+    Texture2D minecraft_atlas;
+    MinecraftRedstone *minecraft;
     Shader cutout_shader;
 } BlockRenderer;
 

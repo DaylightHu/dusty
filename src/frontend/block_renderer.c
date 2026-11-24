@@ -1,4 +1,5 @@
 #include "block_renderer.h"
+#include "minecraft_redstone.h"
 #include "gui.h"
 #include "rlgl.h"
 #include "external/glad.h"
@@ -542,7 +543,7 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     SetTextureWrap(renderer->atlas, TEXTURE_WRAP_CLAMP);
 
     Image iron = load_mapped_tile(pack, "res/textures/block/white_concrete.png",
-                                  "block/iron_block.png", 0);
+                                  "block/white_concrete.png", 0);
     if (iron.data) {
         renderer->iron_texture = LoadTextureFromImage(iron);
         UnloadImage(iron);
@@ -697,12 +698,27 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
         block_renderer_unload(renderer);
         return false;
     }
+    Image minecraft_atlas;
+    renderer->minecraft = minecraft_redstone_load(pack, &minecraft_atlas);
+    if (renderer->minecraft) {
+        renderer->minecraft_atlas = LoadTextureFromImage(minecraft_atlas);
+        UnloadImage(minecraft_atlas);
+        if (renderer->minecraft_atlas.id) {
+            SetTextureFilter(renderer->minecraft_atlas, TEXTURE_FILTER_POINT);
+            SetTextureWrap(renderer->minecraft_atlas, TEXTURE_WRAP_CLAMP);
+        } else {
+            minecraft_redstone_free(renderer->minecraft);
+            renderer->minecraft = NULL;
+        }
+    }
     return true;
 }
 
 void block_renderer_unload(BlockRenderer *renderer)
 {
     if (!renderer) return;
+    minecraft_redstone_free(renderer->minecraft);
+    if (renderer->minecraft_atlas.id) UnloadTexture(renderer->minecraft_atlas);
     if (renderer->cutout_shader.id) UnloadShader(renderer->cutout_shader);
     if (renderer->lever_atlas.id) UnloadTexture(renderer->lever_atlas);
     if (renderer->activator_rail_atlas.id)
@@ -1411,6 +1427,18 @@ void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState sta
                                    Vector3 center, unsigned solid_faces,
                                    BlockGeometry *geometry)
 {
+    const BlockGeometry *baked = minecraft_redstone_geometry(renderer->minecraft, state);
+    if (baked) {
+        geometry->quads = baked->quads;
+        memcpy(geometry->uv, baked->uv, (size_t)baked->quads*sizeof(baked->uv[0]));
+        for (int face = 0; face < baked->quads; ++face) {
+            for (int v = 0; v < 4; ++v) {
+                Vector3 p = baked->vertices[face][v];
+                geometry->vertices[face][v] = (Vector3){p.x+center.x,p.y+center.y,p.z+center.z};
+            }
+        }
+        return;
+    }
     if (state.id == BLOCK_HOPPER) {
         (void)hopper_geometry(renderer, state, center, geometry);
         return;

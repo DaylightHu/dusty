@@ -63,9 +63,10 @@ ZIP in `voxilog/config.toml` under your user configuration directory
 resource_pack = '/home/you/.minecraft/versions/1.16.2/1.16.2.jar'
 ```
 
-Run `voxi load examples` to see the textures. Voxilog reads supported PNGs
-from the archive and uses its bundled textures wherever a replacement is
-unavailable. Remove `resource_pack` to return to the bundled look.
+Run `voxi load examples` to use the local textures and the daytime plains sky.
+Voxilog also reads lever, repeater, comparator, and inventory item models from
+the client JAR. Missing assets use the bundled look. Remove `resource_pack`
+to use bundled assets throughout.
 
 ## C API reference
 
