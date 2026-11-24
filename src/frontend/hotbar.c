@@ -31,19 +31,12 @@ int hotbar_slot_at(Vector2 position)
     return -1;
 }
 
-bool hotbar_init(Hotbar *hotbar)
+bool hotbar_init(Hotbar *hotbar, const Inventory *inventory)
 {
-    static const BlockId default_blocks[HOTBAR_SLOT_COUNT] = {
-        BLOCK_IRON, BLOCK_BLUE_CONCRETE, BLOCK_GRAY_CONCRETE,
-        BLOCK_GREEN_CONCRETE, BLOCK_PURPLE_CONCRETE, BLOCK_YELLOW_CONCRETE,
-        BLOCK_GLASS, BLOCK_REDSTONE_BLOCK, BLOCK_REDSTONE_WIRE
-    };
-    if (!hotbar) return false;
+    if (!hotbar || !inventory) return false;
     *hotbar = (Hotbar){0};
-    for (int index = 0; index < HOTBAR_SLOT_COUNT; ++index)
-        hotbar->slots[index] = (InventorySlot){
-            .kind = INVENTORY_BLOCK, .block = default_blocks[index]
-        };
+    for (int index = 0; index < HOTBAR_SLOT_COUNT && index < inventory->count; ++index)
+        hotbar->slots[index] = inventory->slots[index];
     return true;
 }
 

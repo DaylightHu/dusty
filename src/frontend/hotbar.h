@@ -13,7 +13,7 @@ typedef struct {
     int selected_slot;
 } Hotbar;
 
-bool hotbar_init(Hotbar *hotbar);
+bool hotbar_init(Hotbar *hotbar, const Inventory *inventory);
 void hotbar_unload(Hotbar *hotbar);
 void hotbar_update(Hotbar *hotbar);
 int hotbar_slot_at(Vector2 position);

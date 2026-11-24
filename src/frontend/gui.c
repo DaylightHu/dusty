@@ -1379,7 +1379,7 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
                 settings->resource_pack);
         return false;
     }
-    if (!hotbar_init(&app->hotbar)) {
+    if (!hotbar_init(&app->hotbar, &app->inventory)) {
         fputs("Cannot initialize the hotbar\n", stderr);
         return false;
     }
