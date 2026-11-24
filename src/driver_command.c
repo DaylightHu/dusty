@@ -118,7 +118,7 @@ int dusty_driver(const char *source, const char *cc, bool run)
     const char *temporary = nob_temp_sprintf("build/program-tmp/%.*s-%lu%s",
         (int)strlen(relative) - 2, relative, (unsigned long)driver_process_id(), driver_suffix);
     if (!nob_file_exists("build/libmcmux.a")) {
-        nob_log(NOB_ERROR, "Cannot find build/libmcmux.a; build Dusty from the project root first");
+        nob_log(NOB_ERROR, "Cannot find build/libmcmux.a; build Voxilog from the project root first");
         goto done;
     }
     if (!make_parent_directories(output) || !make_parent_directories(temporary)) goto done;

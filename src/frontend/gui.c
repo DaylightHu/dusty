@@ -1337,9 +1337,9 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
     window_flags |= FLAG_WINDOW_HIGHDPI;
 #endif
     SetConfigFlags(window_flags);
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, TextFormat("Dusty - %s", world_name));
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, TextFormat("Voxilog - %s", world_name));
     if (!IsWindowReady()) {
-        fprintf(stderr, "Cannot open the Dusty window\n");
+        fprintf(stderr, "Cannot open the Voxilog window\n");
         return false;
     }
 #if defined(__linux__)
@@ -1349,7 +1349,7 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
         SetWindowIcon(icon);
         UnloadImage(icon);
     } else {
-        TraceLog(LOG_WARNING, "Cannot load Dusty window icon");
+        TraceLog(LOG_WARNING, "Cannot load Voxilog window icon");
     }
 #endif
     SetWindowMinSize(1000, 650);

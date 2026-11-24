@@ -22,8 +22,9 @@
 #define RAYLIB_SRC RAYLIB_DIR "/src"
 #define TOML_DIR "third_party/tomlc17"
 #define RAYLIB_CONFIG "raylib_config.h"
-#define MAC_APP "build/macos/Dusty.app"
-#define MAC_APP_BINARY MAC_APP "/Contents/MacOS/dusty"
+#define VOXI_EXECUTABLE "voxi"
+#define MAC_APP "build/macos/Voxilog.app"
+#define MAC_APP_BINARY MAC_APP "/Contents/MacOS/" VOXI_EXECUTABLE
 
 static const char *common_sources[] = {
     "src/mcmux.c",
@@ -255,7 +256,7 @@ static bool supported_platform(void)
 #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
     return true;
 #else
-    nob_log(NOB_ERROR, "Dusty currently supports macOS, Windows, and Linux builds");
+    nob_log(NOB_ERROR, "Voxilog currently supports macOS, Windows, and Linux builds");
     return false;
 #endif
 }
@@ -712,7 +713,7 @@ static bool build_dusty(void)
 #if defined(_WIN32)
     if (!compile_gui_icon(&link_objects)) goto cleanup;
 #endif
-    const char *output = nob_temp_sprintf("%s/dusty%s",
+    const char *output = nob_temp_sprintf("%s/" VOXI_EXECUTABLE "%s",
                                           platform_build_dir(), executable_suffix());
     if (!link_target(output, &link_objects)) goto cleanup;
 #if defined(__APPLE__)
@@ -1091,19 +1092,19 @@ static void print_help(const char *program)
 {
     printf("Usage: %s [command]\n\n", program);
     printf("Commands:\n");
-    printf("  build        Build Dusty (default)\n");
+    printf("  build        Build Voxilog (default)\n");
     printf("  gui          Alias for build\n");
-    printf("  run NAME     Build Dusty and open the named world\n");
+    printf("  run NAME     Build Voxilog and open the named world\n");
     printf("  vendor-list  Print vendored files required by macOS, Windows, and Linux\n");
     printf("  precommit    Stage required raylib/TOML files and verify an index-only build\n");
     printf("  reader       Build build/inspect_structure, a standalone .mcs reader\n");
     printf("  benchmark    Generate C queries, compile and run the full redstone suite\n");
     printf("               --compare-modules: one-command baseline/current module comparison\n");
     printf("               --baseline REF: comparison baseline (default: HEAD)\n");
-    printf("  export-c     Compatibility entry for dusty export-c\n");
+    printf("  export-c     Compatibility entry for voxi export-c\n");
     printf("  lib          Build build/libmcmux.a (no GUI dependencies)\n");
     printf("  build-c FILE Build a user C program linked with the simulation core\n");
-    printf("  run-c FILE   Compatibility entry for dusty run-c\n");
+    printf("  run-c FILE   Compatibility entry for voxi run-c\n");
     printf("  clean        Remove the build directory\n");
     printf("  help         Show this help\n");
 }
@@ -1164,7 +1165,7 @@ int main(int argc, char **argv)
 #if defined(__APPLE__)
         const char *binary = MAC_APP_BINARY;
 #else
-        const char *binary = nob_temp_sprintf("%s/dusty%s",
+        const char *binary = nob_temp_sprintf("%s/" VOXI_EXECUTABLE "%s",
                                               platform_build_dir(), executable_suffix());
 #endif
         nob_cmd_append(&run, binary, "load", argv[0]);

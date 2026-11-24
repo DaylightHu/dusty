@@ -113,7 +113,7 @@ int dusty_export_driver(const char *driver)
     if (length < 3 || driver[length - 2] != '.' ||
         tolower((unsigned char)driver[length - 1]) != 'c') {
         fputs("One argument must be a C driver. To export a structure, "
-              "use dusty export-c INPUT.mcs OUTPUT.c [SYMBOL].\n", stderr);
+              "use voxi export-c INPUT.mcs OUTPUT.c [SYMBOL].\n", stderr);
         return 2;
     }
     FILE *source = fopen(driver, "r");
