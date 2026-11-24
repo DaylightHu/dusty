@@ -1122,7 +1122,7 @@ static void draw_world(GuiApp *app, VoxelHit hit)
     if (app->world_msaa.id) rlEnableFramebuffer(app->world_msaa.id);
     ClearBackground(app->sky_color);
     BeginMode3D(app->camera);
-        world_renderer_draw(app->world_renderer, app->camera.position);
+        world_renderer_draw(app->world_renderer);
         if (hit.hit) {
             Vector3 center = {(float)hit.pos.x, (float)hit.pos.y,
                               (float)hit.pos.z};

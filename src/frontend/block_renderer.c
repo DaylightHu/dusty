@@ -171,6 +171,9 @@ static Image create_solid_atlas(const ResourcePack *pack)
         if (!sources[tile].data) goto cleanup;
         if (tiles[tile].quarter_turn > 0) ImageRotateCW(&sources[tile]);
         if (tiles[tile].quarter_turn < 0) ImageRotateCCW(&sources[tile]);
+        /* Keep the pack's RGB colors while drawing these cubes as opaque. */
+        if (tile == SLIME_TILE || tile == HONEY_TILE)
+            ImageFormat(&sources[tile], PIXELFORMAT_UNCOMPRESSED_R8G8B8);
     }
     atlas = GenImageColor(TILE_COUNT*TILE_SIZE, TILE_SIZE, BLANK);
     if (atlas.data)
