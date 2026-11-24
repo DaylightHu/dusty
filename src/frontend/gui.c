@@ -1122,7 +1122,7 @@ static void draw_world(GuiApp *app, VoxelHit hit)
     if (app->world_msaa.id) rlEnableFramebuffer(app->world_msaa.id);
     ClearBackground(app->sky_color);
     BeginMode3D(app->camera);
-        world_renderer_draw(app->world_renderer, app->camera.position);
+        world_renderer_draw(app->world_renderer);
         if (hit.hit) {
             Vector3 center = {(float)hit.pos.x, (float)hit.pos.y,
                               (float)hit.pos.z};
@@ -1331,9 +1331,24 @@ static void draw_save_error(GuiApp *app)
 static bool initialize(GuiApp *app, GameSession *session, const char *world_name)
 {
     *app = (GuiApp){.session = session, .running = true};
-    if (!app_config_init()) fprintf(stderr, "%s\n", app_config_error());
+    if (!app_config_init()) {
+        fprintf(stderr, "%s\n", app_config_error());
+        return false;
+    }
+    const AppSettings *settings = app_config_current();
+    if (!*settings->resource_pack) {
+        fputs("Set assets.resource_pack in the Voxilog config.toml to the absolute path "
+              "of your Minecraft Java 1.16.2 client JAR or compatible ZIP. "
+              "See README.md for the config location.\n", stderr);
+        return false;
+    }
+    ResourcePack *pack = app->resource_pack = resource_pack_open(settings->resource_pack);
+    if (!pack) {
+        fprintf(stderr, "Cannot open the Minecraft resource pack at '%s'. "
+                        "Check assets.resource_pack in config.toml.\n", settings->resource_pack);
+        return false;
+    }
     if (!prepare_world(app)) return false;
-    const AppSettings *settings=app_config_current();
     unsigned int window_flags = FLAG_WINDOW_RESIZABLE;
     if (settings->vsync) window_flags |= FLAG_VSYNC_HINT;
 #if defined(__APPLE__)
@@ -1346,7 +1361,7 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
         return false;
     }
 #if defined(__linux__)
-    Image icon = LoadImage(gui_asset_path("res/icon.png"));
+    Image icon = LoadImage("res/icon.png");
     if (icon.data) {
         ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
         SetWindowIcon(icon);
@@ -1358,28 +1373,18 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
     SetWindowMinSize(1000, 650);
     SetExitKey(KEY_NULL);
     SetTargetFPS(settings->fps_limit);
-    ResourcePack *pack = app->resource_pack = resource_pack_open(settings->resource_pack);
     /* Java Edition plains sky tint at full daylight. */
-    app->sky_color = pack ? (Color){120, 167, 255, 255} : (Color){184, 211, 214, 255};
-    if (pack)
-        TraceLog(LOG_INFO, "BLOCK TEXTURE: Using Minecraft textures from '%s'",
-                 settings->resource_pack);
-    else if (*settings->resource_pack)
-        fprintf(stderr, "Cannot read Minecraft textures from '%s'; using bundled textures\n",
+    app->sky_color = (Color){120, 167, 255, 255};
+    TraceLog(LOG_INFO, "RESOURCE PACK: Loading Minecraft assets from '%s'", settings->resource_pack);
+    if (!ui_font_init(pack) || !block_renderer_init(&app->blocks, pack) ||
+        !inventory_init(&app->inventory, pack)) {
+        fprintf(stderr, "Cannot load the Minecraft assets from '%s'. "
+                        "Use the 1.16.2 client JAR or a ZIP containing the required assets.\n",
                 settings->resource_pack);
-    if (!ui_font_init(pack)) return false;
-    bool block_textures_ready = block_renderer_init(&app->blocks, pack);
-    bool inventory_ready = block_textures_ready && inventory_init(&app->inventory, pack);
-    if (!block_textures_ready) {
-        fprintf(stderr, "Cannot load block textures; run from the project root\n");
-        return false;
-    }
-    if (!inventory_ready) {
-        fprintf(stderr, "Cannot load inventory textures; run from the project root\n");
         return false;
     }
     if (!hotbar_init(&app->hotbar, &app->inventory)) {
-        fprintf(stderr, "Cannot load hotbar textures; run from the project root\n");
+        fputs("Cannot initialize the hotbar\n", stderr);
         return false;
     }
     app->world_renderer = world_renderer_create(game_session_world(session), &app->blocks);
@@ -1394,7 +1399,10 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
 
 static void shutdown_gui(GuiApp *app)
 {
-    if (!IsWindowReady()) return;
+    if (!IsWindowReady()) {
+        resource_pack_close(app->resource_pack);
+        return;
+    }
     release_mouse(app);
     world_msaa_destroy(&app->world_msaa);
     world_renderer_destroy(app->world_renderer);
@@ -1411,7 +1419,6 @@ static bool prepare_gui_view(GuiApp *app)
 {
     int width = GetRenderWidth(), height = GetRenderHeight();
     if (width <= 0 || height <= 0 || GetScreenHeight() <= 0) return false;
-    ui_font_set_scale((float)height/GetScreenHeight());
     if (!app->gui_target.id || app->gui_target.texture.width != width ||
         app->gui_target.texture.height != height) {
         RenderTexture2D target = LoadRenderTexture(width, height);

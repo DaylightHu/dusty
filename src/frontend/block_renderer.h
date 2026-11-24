@@ -12,20 +12,14 @@ typedef struct{
     Texture2D glass_texture;
     Texture2D wire_atlas;
     Texture2D torch_atlas;
-    Texture2D repeater_atlas;
-    Texture2D comparator_atlas;
     Texture2D powered_rail_atlas;
     Texture2D activator_rail_atlas;
-    Texture2D lever_atlas;
     Texture2D minecraft_atlas;
     MinecraftRedstone *minecraft;
     Shader cutout_shader;
 } BlockRenderer;
 
-enum {
-    BLOCK_GEOMETRY_QUADS = 32,
-    REDSTONE_GATE_GEOMETRY_QUADS = 5
-};
+enum { BLOCK_GEOMETRY_QUADS = 32 };
 typedef struct {
     Vector3 vertices[BLOCK_GEOMETRY_QUADS][4];
     Vector2 uv[BLOCK_GEOMETRY_QUADS][4];

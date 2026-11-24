@@ -69,11 +69,20 @@ Add the directory containing `voxi` to your `PATH`.
 
 ## Local Minecraft assets
 
-To use local Minecraft textures and fonts, set the absolute path to a 1.16.2 JAR or resource-pack ZIP in `~/.config/voxilog/config.toml` (`%APPDATA%/voxilog/config.toml` on Windows).
+The 3D viewer requires assets from your own Minecraft Java Edition 1.16.2
+client JAR. Voxilog does not include or download a resource pack. You can also
+supply a ZIP that contains the required 1.16.2 textures, models, block states
+and font files under `assets/minecraft/` at the archive root.
+
+Set `assets.resource_pack` to the archive's absolute path in
+`~/.config/voxilog/config.toml` on Linux and macOS, or
+`%APPDATA%/voxilog/config.toml` on Windows. If set, `XDG_CONFIG_HOME` replaces
+the default configuration base. To select a different config file, set
+`VOXILOG_CONFIG` to its absolute path.
 
 ```toml
 [assets]
-resource_pack = '/path/to/1.16.2.jar'
+resource_pack = '/path/to/.minecraft/versions/1.16.2/1.16.2.jar'
 ```
 
 ## Placement hotkeys

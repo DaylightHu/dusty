@@ -15,6 +15,8 @@ enum {
     ATLAS_TEXTURES = ATLAS_COLUMNS*ATLAS_ROWS
 };
 
+static const char *const family_names[] = {"lever", "repeater", "comparator", "piston"};
+
 struct MinecraftRedstone {
     BlockGeometry *families[FAMILY_COUNT];
 };
@@ -141,7 +143,6 @@ static bool bake_variant(const ResourcePack *pack, Atlas *atlas,
 static BlockGeometry *load_family(const ResourcePack *pack, Atlas *atlas, unsigned kind)
 {
     static const unsigned counts[] = {LEVER_VARIANTS, REPEATER_VARIANTS, COMPARATOR_VARIANTS, PISTON_VARIANTS};
-    static const char *const names[] = {"lever", "repeater", "comparator", "piston"};
     char keys[REPEATER_VARIANTS][KEY_SIZE];
     const char *key_paths[REPEATER_VARIANTS];
     MinecraftVariant variants[REPEATER_VARIANTS];
@@ -154,7 +155,7 @@ static BlockGeometry *load_family(const ResourcePack *pack, Atlas *atlas, unsign
                                      variants + PISTON_BASE_VARIANTS, PISTON_BASE_VARIANTS) ||
             !minecraft_variants_read(pack, "piston_head", key_paths + PISTON_HEAD_FIRST,
                                      variants + PISTON_HEAD_FIRST, 2*DIR_COUNT)) return NULL;
-    } else if (!minecraft_variants_read(pack, names[kind], key_paths, variants, count)) return NULL;
+    } else if (!minecraft_variants_read(pack, family_names[kind], key_paths, variants, count)) return NULL;
 
     BlockGeometry *baked = calloc(count, sizeof(*baked));
     if (!baked) return NULL;
@@ -181,15 +182,22 @@ MinecraftRedstone *minecraft_redstone_load(const ResourcePack *pack, Image *imag
     MinecraftRedstone *models = calloc(1, sizeof(*models));
     if (!models) return NULL;
     Atlas atlas = {0};
-    for (unsigned i = 0; i < FAMILY_COUNT; ++i)
+    for (unsigned i = 0; i < FAMILY_COUNT; ++i) {
         models->families[i] = load_family(pack, &atlas, i);
-    if (atlas.count) {
-        *image = GenImageColor(ATLAS_COLUMNS*ATLAS_TILE, ATLAS_ROWS*ATLAS_TILE, BLANK);
-        Rectangle tile = {0,0,ATLAS_TILE,ATLAS_TILE};
-        if (image->data)
-            for (unsigned i = 0; i < atlas.count; ++i)
-                ImageDraw(image, atlas.textures[i], tile, tile_rect(i), WHITE);
+        if (!models->families[i]) {
+            TraceLog(LOG_ERROR, "BLOCK MODEL: Cannot load %s variants from the resource pack",
+                     family_names[i]);
+            goto cleanup;
+        }
     }
+    *image = GenImageColor(ATLAS_COLUMNS*ATLAS_TILE, ATLAS_ROWS*ATLAS_TILE, BLANK);
+    if (image->data) {
+        Rectangle tile = {0, 0, ATLAS_TILE, ATLAS_TILE};
+        for (unsigned i = 0; i < atlas.count; ++i)
+            ImageDraw(image, atlas.textures[i], tile, tile_rect(i), WHITE);
+    }
+
+cleanup:
     rollback_tiles(&atlas, 0);
     if (image->data) return models;
     minecraft_redstone_free(models);
@@ -203,16 +211,10 @@ void minecraft_redstone_free(MinecraftRedstone *models)
     free(models);
 }
 
-bool minecraft_redstone_has(const MinecraftRedstone *models, BlockId id)
-{
-    unsigned kind = family(id);
-    return models && kind != FAMILY_COUNT && models->families[kind];
-}
-
 const BlockGeometry *minecraft_redstone_geometry(const MinecraftRedstone *models, BlockState state)
 {
     unsigned kind = family((BlockId)state.id);
-    if (!models || kind == FAMILY_COUNT || !models->families[kind]) return NULL;
+    if (kind == FAMILY_COUNT) return NULL;
     unsigned index;
     if (kind == LEVER) {
         Direction support = (Direction)state.data.lever.support_dir;
