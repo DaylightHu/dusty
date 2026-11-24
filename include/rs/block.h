@@ -18,6 +18,11 @@ typedef enum {
     BLOCK_PISTON_HEAD = BLOCK_INTERNAL_FIRST,
     BLOCK_STICKY_PISTON_HEAD,
     BLOCK_MOVING_PISTON,
+    /* Extend the public set after the original IDs, including piston internals. */
+    BLOCK_BLACK_CONCRETE, BLOCK_BROWN_CONCRETE, BLOCK_CYAN_CONCRETE,
+    BLOCK_LIGHT_BLUE_CONCRETE, BLOCK_LIGHT_GRAY_CONCRETE, BLOCK_LIME_CONCRETE,
+    BLOCK_MAGENTA_CONCRETE, BLOCK_ORANGE_CONCRETE, BLOCK_PINK_CONCRETE,
+    BLOCK_RED_CONCRETE,
     BLOCK_COUNT
 } BlockId;
 
@@ -114,6 +119,8 @@ const char *note_instrument_name(NoteInstrument instrument);
 BlockPos block_offset(BlockPos pos, Direction direction);
 Direction direction_opposite(Direction direction);
 bool direction_horizontal(Direction direction);
+/* True for blocks that can be selected and placed by the player. */
+bool block_is_placeable(BlockId id);
 bool block_is_piston_base(BlockId id);
 bool block_is_piston_head(BlockId id);
 bool block_piston_pair(BlockId base, BlockId head);

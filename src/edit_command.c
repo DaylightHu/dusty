@@ -54,8 +54,9 @@ static Direction direction_value(const char *text)
 static BlockId block_value(const char *text)
 {
     if (!strncmp(text,"minecraft:",10)) text+=10;
-    for (BlockId id=BLOCK_AIR; id<BLOCK_INTERNAL_FIRST; ++id)
-        if (!strcmp(text,block_name(id))) return id;
+    for (BlockId id=BLOCK_AIR; id<BLOCK_COUNT; ++id)
+        if ((id == BLOCK_AIR || block_is_placeable(id)) &&
+            !strcmp(text,block_name(id))) return id;
     return BLOCK_COUNT;
 }
 
@@ -308,7 +309,8 @@ RsResult edit_command_run(GameSession *session, const EditCommand *c,
             c->kind==EDIT_UNDO ? "Undid" : "Redid",changed);
         break;
     case EDIT_REPLACE:
-        if (c->replace_from>=BLOCK_INTERNAL_FIRST || c->replace_to>=BLOCK_INTERNAL_FIRST) {
+        if ((c->replace_from != BLOCK_AIR && !block_is_placeable(c->replace_from)) ||
+            (c->replace_to != BLOCK_AIR && !block_is_placeable(c->replace_to))) {
             snprintf(message,capacity,"Use //replace BLOCK_A BLOCK_B with valid block names");
             return RS_INVALID_ARGUMENT;
         }

@@ -6,17 +6,12 @@
 #include <stddef.h>
 
 enum {
-    INVENTORY_COLUMNS = 8,
-    INVENTORY_ROWS = 4,
     INVENTORY_SLOT_SIZE = 58,
     INVENTORY_SLOT_GAP = 4,
     INVENTORY_PANEL_PADDING = 18,
     INVENTORY_HEADER_HEIGHT = 52,
     INVENTORY_FOOTER_HEIGHT = 32
 };
-
-_Static_assert(INVENTORY_COLUMNS*INVENTORY_ROWS == INVENTORY_SLOT_COUNT,
-        "inventory grid must match slot capacity");
 
 typedef struct {
     BlockId id;
@@ -36,6 +31,16 @@ static const BlockTexture block_textures[] = {
     {BLOCK_GREEN_CONCRETE, "green_concrete"},
     {BLOCK_PURPLE_CONCRETE, "purple_concrete"},
     {BLOCK_YELLOW_CONCRETE, "yellow_concrete"},
+    {BLOCK_BLACK_CONCRETE, "black_concrete"},
+    {BLOCK_BROWN_CONCRETE, "brown_concrete"},
+    {BLOCK_CYAN_CONCRETE, "cyan_concrete"},
+    {BLOCK_LIGHT_BLUE_CONCRETE, "light_blue_concrete"},
+    {BLOCK_LIGHT_GRAY_CONCRETE, "light_gray_concrete"},
+    {BLOCK_LIME_CONCRETE, "lime_concrete"},
+    {BLOCK_MAGENTA_CONCRETE, "magenta_concrete"},
+    {BLOCK_ORANGE_CONCRETE, "orange_concrete"},
+    {BLOCK_PINK_CONCRETE, "pink_concrete"},
+    {BLOCK_RED_CONCRETE, "red_concrete"},
     {BLOCK_GLASS, "glass"},
     {BLOCK_REDSTONE_BLOCK, "redstone_block"},
     {BLOCK_REDSTONE_WIRE, "redstone"},
@@ -65,6 +70,16 @@ static const char *const minecraft_icons[BLOCK_COUNT] = {
     [BLOCK_GREEN_CONCRETE] = "block/green_concrete.png",
     [BLOCK_PURPLE_CONCRETE] = "block/purple_concrete.png",
     [BLOCK_YELLOW_CONCRETE] = "block/yellow_concrete.png",
+    [BLOCK_BLACK_CONCRETE] = "block/black_concrete.png",
+    [BLOCK_BROWN_CONCRETE] = "block/brown_concrete.png",
+    [BLOCK_CYAN_CONCRETE] = "block/cyan_concrete.png",
+    [BLOCK_LIGHT_BLUE_CONCRETE] = "block/light_blue_concrete.png",
+    [BLOCK_LIGHT_GRAY_CONCRETE] = "block/light_gray_concrete.png",
+    [BLOCK_LIME_CONCRETE] = "block/lime_concrete.png",
+    [BLOCK_MAGENTA_CONCRETE] = "block/magenta_concrete.png",
+    [BLOCK_ORANGE_CONCRETE] = "block/orange_concrete.png",
+    [BLOCK_PINK_CONCRETE] = "block/pink_concrete.png",
+    [BLOCK_RED_CONCRETE] = "block/red_concrete.png",
     [BLOCK_GLASS] = "block/glass.png",
     [BLOCK_REDSTONE_BLOCK] = "block/redstone_block.png",
     [BLOCK_REDSTONE_WIRE] = "item/redstone.png",

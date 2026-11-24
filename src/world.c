@@ -639,7 +639,7 @@ static RsResult place_block(World *w, BlockPos p, BlockId id, Direction support,
 {
     if (!w) return RS_INVALID_ARGUMENT;
     if (!world_in_bounds(w, p)) return RS_OUT_OF_BOUNDS;
-    if (id <= BLOCK_AIR || id >= BLOCK_INTERNAL_FIRST)
+    if (!block_is_placeable(id))
         return RS_INVALID_ARGUMENT;
     if (block_is_rail(id) && direction_horizontal(support))
         support = support/2 == DIR_EAST/2 ? DIR_EAST : DIR_NORTH;

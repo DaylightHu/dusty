@@ -80,7 +80,7 @@ bool sim_add_piston_motion(World *world, PistonMotion motion)
         motion.moved_state.id == BLOCK_AIR ||
         motion.moved_state.id == BLOCK_MOVING_PISTON ||
         !state_encode(motion.moved_state, &moved_id) ||
-        (!motion.source && motion.moved_state.id >= BLOCK_INTERNAL_FIRST) ||
+        (!motion.source && !block_is_placeable((BlockId)motion.moved_state.id)) ||
         (motion.source &&
          (!source_payload ||
           (motion.extending &&
