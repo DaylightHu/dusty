@@ -1,32 +1,67 @@
-# voxilog
-Voxilog is an experimental redstone simulator written in C, based on Minecraft 1.16.2. It started as a project to learn raylib and later evolved into an effort to combine redstone construction with programming.
+# Voxilog
 
-The goal is to give users control over circuit inputs, execution backends, and simulation time, enabling faster execution of circuits built entirely from redstone. The computation remains in the circuits themselves, with their logic and in-game timing preserved.
+Voxilog is a C workbench for Minecraft Java 1.16.2 redstone. Build circuits in
+3D and drive them from C.
 
+## Commands
 
-> [!TIP]
-> **📖 API Reference**
->
-> Explore public functions, grouped by purpose, with concise descriptions.
->
-> [**English →**](https://daylighthu.github.io/mcmux/mcmux-api-en.html) · [**简体中文 →**](https://daylighthu.github.io/mcmux/mcmux-api-zh.html)
->
+Run from the repository root.
+
+| Command | What it does |
+| --- | --- |
+| `voxi list` | List saved worlds. |
+| `voxi create NAME` | Create `saves/NAME/NAME.mcw`. |
+| `voxi load NAME` | Open a world in 3D. Try `voxi load examples`. |
+| `voxi delete NAME` | Permanently delete `saves/NAME/` and its contents. |
+| `voxi run-c DRIVER.c` | Compile and run a C source file inside the repository. |
+| `voxi export-c DRIVER.c` | Export using the paths and model name in the driver's `// mcmux-model:` line. |
+| `voxi export-c INPUT.mcs OUTPUT.c [SYMBOL]` | Export the structure at `INPUT.mcs` to `OUTPUT.c`. The model name `SYMBOL` defaults to `mcmux_circuit`. |
+| `voxi --help` | Show command usage. |
+
+Quote world names with spaces, as in `voxi create "Timing Lab"`.
+
+## Example driver
+
+In voxilog, you write your own drivers. You express the behavior you want through the redstone circuit’s own logic, then use a simulation backend to run the circuit faster.
+
+For example:
+```sh
+voxi export-c saves/examples/carry_cancel_array.c
+voxi run-c saves/examples/carry_cancel_array.c
+```
+
+This generates `build/carry_cancel_array_model.c` and runs the 16-bit adder.
 
 ## Build
 
-Use a C compiler to compile `nob.c` into the `nob` build runner. Then run the
-`./nob` commands from the project root. On Windows, use the equivalent
-`nob.exe` form.
+On Linux or macOS, build from the repository root. Linux requires X11 and
+OpenGL development libraries.
 
-| Command | Purpose |
-| --- | --- |
-| `./nob` or `./nob build` | Build the project. |
+```sh
+cc -std=c11 -O2 nob.c -o nob
+./nob build
+```
+
+On Windows, use Clang with `llvm-windres` or `windres`.
+
+```powershell
+clang -std=c11 -O2 nob.c -o nob.exe
+.\nob.exe build
+```
+
+Add the directory containing `voxi` to your `PATH`.
+
+## C API reference
+
+[English](https://daylighthu.github.io/voxilog/api-en.html) ·
+[简体中文](https://daylighthu.github.io/voxilog/api-zh.html)
 
 ## References
 
-- https://github.com/raysan5/raylib
-- https://github.com/MCHPR/MCHPRS
-- https://github.com/gnembon/fabric-carpet
-- https://github.com/maruohon/tweakeroo
-- https://github.com/EngineHub/WorldEdit
-- https://www.verilog.com
+- [raylib](https://github.com/raysan5/raylib)
+- [MCHPRS](https://github.com/MCHPR/MCHPRS)
+- [Carpet](https://github.com/gnembon/fabric-carpet)
+- [Tweakeroo](https://github.com/maruohon/tweakeroo)
+- [WorldEdit](https://github.com/EngineHub/WorldEdit)
+- [Verilog](https://www.verilog.com)
+- [nob.h](https://github.com/tsoding/nob.h)
