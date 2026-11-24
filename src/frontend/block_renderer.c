@@ -1,4 +1,5 @@
 #include "block_renderer.h"
+#include "blocks/concrete.h"
 #include "minecraft_redstone.h"
 #include "rlgl.h"
 #include "external/glad.h"
@@ -27,8 +28,8 @@ enum {
     DROPPER_SIDE_TILE = DROPPER_TOP_TILE + 1,
     LAMP_OFF_TILE = DROPPER_SIDE_TILE + 1,
     LAMP_ON_TILE = LAMP_OFF_TILE + 1,
-    BLUE_CONCRETE_TILE = LAMP_ON_TILE + 1,
-    TILE_COUNT = BLUE_CONCRETE_TILE + 5
+    CONCRETE_TILE_FIRST = LAMP_ON_TILE + 1,
+    TILE_COUNT = CONCRETE_TILE_FIRST + COLORED_CONCRETE_COUNT
 };
 enum { OBSERVER_BACK, OBSERVER_FRONT, OBSERVER_SIDE, OBSERVER_TOP };
 enum { BARREL_SIDE, BARREL_TOP, BARREL_TOP_OPEN, BARREL_BOTTOM };
@@ -155,11 +156,22 @@ static Image create_solid_atlas(const ResourcePack *pack)
         {"block/furnace_side.png", 0},
         {"block/redstone_lamp.png", 0},
         {"block/redstone_lamp_on.png", 0},
+        /* Colored concrete tiles follow colored_concrete_index(). */
         {"block/blue_concrete.png", 0},
         {"block/gray_concrete.png", 0},
         {"block/green_concrete.png", 0},
         {"block/purple_concrete.png", 0},
         {"block/yellow_concrete.png", 0},
+        {"block/black_concrete.png", 0},
+        {"block/brown_concrete.png", 0},
+        {"block/cyan_concrete.png", 0},
+        {"block/light_blue_concrete.png", 0},
+        {"block/light_gray_concrete.png", 0},
+        {"block/lime_concrete.png", 0},
+        {"block/magenta_concrete.png", 0},
+        {"block/orange_concrete.png", 0},
+        {"block/pink_concrete.png", 0},
+        {"block/red_concrete.png", 0},
     };
     _Static_assert(sizeof(tiles)/sizeof(*tiles) == TILE_COUNT, "solid atlas tile count");
     Image sources[TILE_COUNT] = {0};
@@ -695,15 +707,13 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         memcpy(uv, geometry.uv, (size_t)count * sizeof(geometry.uv[0]));
         return count;
     }
-    if ((state.id >= BLOCK_BLUE_CONCRETE && state.id <= BLOCK_YELLOW_CONCRETE) ||
-        state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
+    int concrete = colored_concrete_index((BlockId)state.id);
+    if (concrete >= 0 || state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
         state.id == BLOCK_GLASS || state.id == BLOCK_SLIME ||
         state.id == BLOCK_NOTE_BLOCK || state.id == BLOCK_HONEY ||
         state.id == BLOCK_REDSTONE_LAMP) {
         Texture2D texture = cube_texture(renderer, (BlockId)state.id);
-        int tile = (state.id >= BLOCK_BLUE_CONCRETE &&
-                    state.id <= BLOCK_YELLOW_CONCRETE) ?
-                       BLUE_CONCRETE_TILE + state.id - BLOCK_BLUE_CONCRETE :
+        int tile = concrete >= 0 ? CONCRETE_TILE_FIRST + concrete :
                    state.id == BLOCK_SLIME ? SLIME_TILE :
                    state.id == BLOCK_NOTE_BLOCK ? NOTE_BLOCK_TILE :
                    state.id == BLOCK_HONEY ? HONEY_TILE :
@@ -829,8 +839,7 @@ void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState sta
     }
     geometry->quads = block_renderer_build_uv(renderer, state, solid_faces, geometry->uv);
     int count = 0;
-    if ((state.id >= BLOCK_BLUE_CONCRETE && state.id <= BLOCK_YELLOW_CONCRETE) ||
-        state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
+    if (block_is_concrete((BlockId)state.id) || state.id == BLOCK_REDSTONE_BLOCK ||
         state.id == BLOCK_GLASS || state.id == BLOCK_OBSERVER ||
         state.id == BLOCK_BARREL || state.id == BLOCK_SLIME ||
         state.id == BLOCK_NOTE_BLOCK || state.id == BLOCK_HONEY ||

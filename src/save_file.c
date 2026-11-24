@@ -96,7 +96,7 @@ static bool motion_valid(const World *w, const PistonMotion *motion)
         motion->moved_state.id == BLOCK_AIR ||
         motion->moved_state.id == BLOCK_MOVING_PISTON ||
         (!motion->source &&
-         motion->moved_state.id >= BLOCK_INTERNAL_FIRST) ||
+         !block_is_placeable((BlockId)motion->moved_state.id)) ||
         motion->progress > 2 ||
         motion->previous_progress > motion->progress ||
         motion->progress - motion->previous_progress > 1 ||

@@ -1,4 +1,5 @@
 #include "redstone_c.h"
+#include "blocks/concrete.h"
 
 #include <inttypes.h>
 #include <stdarg.h>
@@ -198,17 +199,11 @@ static bool node_supported(const RedstonePlan *plan, size_t id)
     case BLOCK_REDSTONE_TORCH:
     case BLOCK_REDSTONE_REPEATER:
     case BLOCK_REDSTONE_COMPARATOR:
-    case BLOCK_IRON:
-    case BLOCK_BLUE_CONCRETE:
-    case BLOCK_GRAY_CONCRETE:
-    case BLOCK_GREEN_CONCRETE:
-    case BLOCK_PURPLE_CONCRETE:
-    case BLOCK_YELLOW_CONCRETE:
     case BLOCK_SLIME:
     case BLOCK_TARGET:
         break;
     default:
-        return false;
+        if (!block_is_concrete(target)) return false;
     }
     for (size_t i = 0; i < node.input_count; ++i) {
         RedstonePlanInput input = plan->inputs[node.first_input + i];

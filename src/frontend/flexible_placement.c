@@ -26,7 +26,7 @@ PlacementTarget flexible_placement_target(VoxelHit hit, BlockId block,
         .up = DIR_COUNT, .direction = DIR_COUNT};
     if (!hit.hit || !hit.has_face || (unsigned)hit.face >= DIR_COUNT ||
         !direction_horizontal(horizontal) || (unsigned)looking >= DIR_COUNT ||
-        block <= BLOCK_AIR || block >= BLOCK_INTERNAL_FIRST ||
+        !block_is_placeable(block) ||
         !isfinite(hit.local.x) || !isfinite(hit.local.y) || !isfinite(hit.local.z))
         return target;
 

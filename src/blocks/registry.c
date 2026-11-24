@@ -25,6 +25,16 @@ const BlockDef *block_definition(BlockId id)
         [BLOCK_GREEN_CONCRETE] = &rs_green_concrete_def,
         [BLOCK_PURPLE_CONCRETE] = &rs_purple_concrete_def,
         [BLOCK_YELLOW_CONCRETE] = &rs_yellow_concrete_def,
+        [BLOCK_BLACK_CONCRETE] = &rs_black_concrete_def,
+        [BLOCK_BROWN_CONCRETE] = &rs_brown_concrete_def,
+        [BLOCK_CYAN_CONCRETE] = &rs_cyan_concrete_def,
+        [BLOCK_LIGHT_BLUE_CONCRETE] = &rs_light_blue_concrete_def,
+        [BLOCK_LIGHT_GRAY_CONCRETE] = &rs_light_gray_concrete_def,
+        [BLOCK_LIME_CONCRETE] = &rs_lime_concrete_def,
+        [BLOCK_MAGENTA_CONCRETE] = &rs_magenta_concrete_def,
+        [BLOCK_ORANGE_CONCRETE] = &rs_orange_concrete_def,
+        [BLOCK_PINK_CONCRETE] = &rs_pink_concrete_def,
+        [BLOCK_RED_CONCRETE] = &rs_red_concrete_def,
         [BLOCK_REDSTONE_BLOCK] = &rs_redstone_block_def,
         [BLOCK_REDSTONE_WIRE] = &rs_wire_def,
         [BLOCK_REDSTONE_TORCH] = &rs_torch_def,
@@ -90,6 +100,12 @@ BlockState block_default(BlockId id)
         state.data.lever.facing = DIR_NORTH;
     }
     return state;
+}
+
+bool block_is_placeable(BlockId id)
+{
+    return (unsigned)id < BLOCK_COUNT && id != BLOCK_AIR &&
+           (id < BLOCK_INTERNAL_FIRST || id > BLOCK_MOVING_PISTON);
 }
 
 bool block_is_piston_base(BlockId id)

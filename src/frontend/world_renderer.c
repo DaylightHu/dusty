@@ -1,4 +1,5 @@
 #include "world_renderer.h"
+#include "blocks/concrete.h"
 #include "minecraft_redstone.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -56,9 +57,6 @@ static int part_for(unsigned id)
     switch (id) {
     case BLOCK_IRON: return IRON;
     case BLOCK_REDSTONE_BLOCK: case BLOCK_OBSERVER:
-    case BLOCK_BLUE_CONCRETE: case BLOCK_GRAY_CONCRETE:
-    case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
-    case BLOCK_YELLOW_CONCRETE:
     case BLOCK_BARREL: case BLOCK_SLIME: case BLOCK_HONEY:
     case BLOCK_NOTE_BLOCK:
     case BLOCK_TARGET: case BLOCK_HOPPER: case BLOCK_DROPPER:
@@ -74,7 +72,7 @@ static int part_for(unsigned id)
     case BLOCK_ACTIVATOR_RAIL: return ACTIVATOR_RAILS;
     case BLOCK_REDSTONE_TORCH: return TORCHES;
     case BLOCK_LEVER: return LEVERS;
-    default: return -1;
+    default: return block_is_concrete((BlockId)id) ? SOLIDS : -1;
     }
 }
 

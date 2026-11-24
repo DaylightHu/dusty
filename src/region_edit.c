@@ -549,7 +549,8 @@ RsResult region_editor_replace(RegionEditor *e, BlockId from, BlockId to,
     RegionBounds bounds;
     RsResult result=selected_bounds(e,&bounds);
     if (result!=RS_OK) return result;
-    if ((unsigned)from>=BLOCK_INTERNAL_FIRST || (unsigned)to>=BLOCK_INTERNAL_FIRST)
+    if ((from != BLOCK_AIR && !block_is_placeable(from)) ||
+        (to != BLOCK_AIR && !block_is_placeable(to)))
         return RS_INVALID_ARGUMENT;
     if (from==to) return RS_OK;
 

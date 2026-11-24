@@ -7,7 +7,8 @@
 
 #include <stdbool.h>
 
-enum {INVENTORY_SLOT_COUNT = 32};
+enum { INVENTORY_COLUMNS = 8, INVENTORY_ROWS = 5,
+       INVENTORY_SLOT_COUNT = INVENTORY_COLUMNS*INVENTORY_ROWS };
 
 typedef enum {
     INVENTORY_EMPTY,

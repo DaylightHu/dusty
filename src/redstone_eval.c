@@ -1,4 +1,5 @@
 #include "redstone_eval.h"
+#include "blocks/concrete.h"
 
 #include <stdlib.h>
 
@@ -233,17 +234,11 @@ RsResult redstone_evaluate(const RedstoneState *state, RedstoneNodeId node,
     case BLOCK_REDSTONE_TORCH:
     case BLOCK_REDSTONE_REPEATER:
     case BLOCK_REDSTONE_COMPARATOR:
-    case BLOCK_IRON:
-    case BLOCK_BLUE_CONCRETE:
-    case BLOCK_GRAY_CONCRETE:
-    case BLOCK_GREEN_CONCRETE:
-    case BLOCK_PURPLE_CONCRETE:
-    case BLOCK_YELLOW_CONCRETE:
     case BLOCK_SLIME:
     case BLOCK_TARGET:
         break;
     default:
-        return RS_UNSUPPORTED;
+        if (!block_is_concrete((BlockId)block.id)) return RS_UNSUPPORTED;
     }
     if (!input_range_valid(state->plan, info)) return RS_INTERNAL_ERROR;
     RedstoneEvaluation value = {0};

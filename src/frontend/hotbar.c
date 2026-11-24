@@ -31,15 +31,19 @@ int hotbar_slot_at(Vector2 position)
     return -1;
 }
 
-bool hotbar_init(Hotbar *hotbar, const Inventory *inventory)
+bool hotbar_init(Hotbar *hotbar)
 {
-    if (!hotbar || !inventory) return false;
+    static const BlockId default_blocks[HOTBAR_SLOT_COUNT] = {
+        BLOCK_IRON, BLOCK_BLUE_CONCRETE, BLOCK_GRAY_CONCRETE,
+        BLOCK_GREEN_CONCRETE, BLOCK_PURPLE_CONCRETE, BLOCK_YELLOW_CONCRETE,
+        BLOCK_GLASS, BLOCK_REDSTONE_BLOCK, BLOCK_REDSTONE_WIRE
+    };
+    if (!hotbar) return false;
     *hotbar = (Hotbar){0};
-    int count = inventory->count < HOTBAR_SLOT_COUNT ?
-                inventory->count : HOTBAR_SLOT_COUNT;
-    for (int index = 0; index < count; ++index)
-        hotbar->slots[index] = inventory->slots[index];
-    hotbar->selected_slot = 0;
+    for (int index = 0; index < HOTBAR_SLOT_COUNT; ++index)
+        hotbar->slots[index] = (InventorySlot){
+            .kind = INVENTORY_BLOCK, .block = default_blocks[index]
+        };
     return true;
 }
 
@@ -95,7 +99,7 @@ bool hotbar_set_selected(Hotbar *hotbar, InventorySlot slot)
     if (!hotbar || hotbar->selected_slot < 0 ||
         hotbar->selected_slot >= HOTBAR_SLOT_COUNT) return false;
     if (slot.kind == INVENTORY_BLOCK) {
-        if (slot.block <= BLOCK_AIR || slot.block >= BLOCK_INTERNAL_FIRST)
+        if (!block_is_placeable(slot.block))
             return false;
     } else if (slot.kind == INVENTORY_ITEM) {
         if (!slot.stack.count || !item_stack_valid(slot.stack)) return false;
@@ -115,7 +119,7 @@ bool hotbar_set_selected_block(Hotbar *hotbar, BlockId id)
 
 bool hotbar_pick_block(Hotbar *hotbar, BlockId id)
 {
-    if (!hotbar || id <= BLOCK_AIR || id >= BLOCK_INTERNAL_FIRST)
+    if (!hotbar || !block_is_placeable(id))
         return false;
 
     for (int slot = 0; slot < HOTBAR_SLOT_COUNT; ++slot) {

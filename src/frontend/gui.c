@@ -352,7 +352,7 @@ static RsResult run_gui_edit(GuiApp *app, const EditCommand *command)
 
 static bool flexible_placement_held(BlockId selected)
 {
-    return selected > BLOCK_AIR && selected < BLOCK_INTERNAL_FIRST &&
+    return block_is_placeable(selected) &&
            (app_input_world("placement_offset",true) || app_input_world("placement_rotation",true));
 }
 
@@ -428,7 +428,7 @@ static BlockId pickable_block(BlockId id)
 {
     if (id == BLOCK_PISTON_HEAD) return BLOCK_PISTON;
     if (id == BLOCK_STICKY_PISTON_HEAD) return BLOCK_STICKY_PISTON;
-    return id > BLOCK_AIR && id < BLOCK_INTERNAL_FIRST ? id : BLOCK_AIR;
+    return block_is_placeable(id) ? id : BLOCK_AIR;
 }
 
 static void advance_world(GuiApp *app)
@@ -1379,7 +1379,7 @@ static bool initialize(GuiApp *app, GameSession *session, const char *world_name
                 settings->resource_pack);
         return false;
     }
-    if (!hotbar_init(&app->hotbar, &app->inventory)) {
+    if (!hotbar_init(&app->hotbar)) {
         fputs("Cannot initialize the hotbar\n", stderr);
         return false;
     }

@@ -52,7 +52,7 @@ bool command_complete(CommandCompletion *state, char *line, size_t capacity)
     if (count == 1) word += slashes;
     size_t offset = (size_t)(word - copy);
     size_t prefix = strlen(word);
-    const char *choices[COUNT(shared_commands) + COUNT(edit_commands) + BLOCK_INTERNAL_FIRST];
+    const char *choices[COUNT(shared_commands) + COUNT(edit_commands) + BLOCK_COUNT];
     size_t choices_count = 0;
     bool directional_edit = strcmp(name, "stack") == 0 || strcmp(name, "move") == 0;
 #define ADD(array) do { \
@@ -62,8 +62,9 @@ bool command_complete(CommandCompletion *state, char *line, size_t capacity)
         if (slashes < 2) ADD(shared_commands);
         ADD(edit_commands);
     } else if (count <= 3 && strcmp(name, "replace") == 0) {
-        for (BlockId id = BLOCK_AIR; id < BLOCK_INTERNAL_FIRST; ++id)
-            choices[choices_count++] = block_name(id);
+        for (BlockId id = BLOCK_AIR; id < BLOCK_COUNT; ++id)
+            if (id == BLOCK_AIR || block_is_placeable(id))
+                choices[choices_count++] = block_name(id);
     } else if (directional_edit || strcmp(name, "copy") == 0 || strcmp(name, "paste") == 0) {
         size_t arguments = 0;
         bool has_air_flag = false;
