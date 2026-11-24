@@ -1,9 +1,9 @@
 #ifndef MC_UI_FONT_H
 #define MC_UI_FONT_H
 
-#include "raylib.h"
+#include "resource_pack.h"
 
-bool ui_font_init(void);
+bool ui_font_init(const ResourcePack *pack);
 void ui_font_unload(void);
 void ui_font_set_scale(float scale);
 void ui_text_draw(const char *text, int x, int y, int size, Color color);

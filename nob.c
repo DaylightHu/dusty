@@ -82,6 +82,8 @@ static const char *gui_sources[] = {
     TOML_DIR "/tomlc17.c",
     "src/frontend/app_config.c",
     "src/frontend/resource_pack.c",
+    "src/frontend/pack_json.c",
+    "src/frontend/minecraft_font.c",
     "src/frontend/minecraft_model.c",
     "src/frontend/minecraft_redstone.c",
     "src/frontend/minecraft_item.c",

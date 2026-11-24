@@ -9,6 +9,8 @@ ResourcePack *resource_pack_open(const char *path);
 void resource_pack_close(ResourcePack *pack);
 /* Paths are relative to assets/minecraft/textures in the archive. */
 Image resource_pack_image(const ResourcePack *pack, const char *path);
+/* Read up to 64 KiB under assets/minecraft. Release it with free(). */
+unsigned char *resource_pack_bytes(const ResourcePack *pack, const char *path, int *size);
 /* Read a small JSON document under assets/minecraft. Release it with free(). */
 char *resource_pack_json(const ResourcePack *pack, const char *path);
 
