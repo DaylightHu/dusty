@@ -20,11 +20,27 @@ Run from the repository root.
 
 Quote world names with spaces, as in `voxi create "Timing Lab"`.
 
+## World editing
+
+Select two corners with the wooden axe (left and right click), or press `/`
+to open the command line and enter `//pos1 X Y Z` and `//pos2 X Y Z`.
+
+| In-game command | Action |
+| --- | --- |
+| `//replace BLOCK_A BLOCK_B` | Replace matching blocks in the selection. For example, `//replace white_concrete gray_concrete`. |
+| `//copy [-a] [X Y Z]` | Copy the selection with an optional anchor. |
+| `//paste [-a] [X Y Z]` | Paste at the given position or at the player. |
+| `//stack [-a] [N] [DIR]` | Repeat the selection `N` times along `DIR`. |
+| `//move [-a] [N] [DIR]` | Move the selection `N` blocks along `DIR`. |
+| `//undo`, `//redo` | Step backward or forward through edit history. |
+| `//schem save [-f] NAME [X Y Z]`, `//schem load NAME` | Save a selection to `.mcs` or load it into the clipboard. `-f` allows overwrite. |
+
+`-a` skips air. Stack and move default to one step in the look direction.
+
 ## Example driver
 
 In voxilog, you write your own drivers. You express the behavior you want through the redstone circuit’s own logic, then use a simulation backend to run the circuit faster.
 
-For example:
 ```sh
 voxi export-c saves/examples/carry_cancel_array.c
 voxi run-c saves/examples/carry_cancel_array.c
@@ -53,20 +69,24 @@ Add the directory containing `voxi` to your `PATH`.
 
 ## Local Minecraft textures
 
-Set an absolute path to your Minecraft Java 1.16.2 client JAR or resource-pack
-ZIP in `voxilog/config.toml` under your user configuration directory
-(`~/.config` by default on Linux and macOS, `%APPDATA%` on Windows).
-`VOXILOG_CONFIG` can point to a different TOML file.
+Set the absolute path to a local Minecraft 1.16.2 JAR or resource-pack ZIP in
+`~/.config/voxilog/config.toml` (`%APPDATA%/voxilog/config.toml` on Windows).
 
 ```toml
 [assets]
-resource_pack = '/home/you/.minecraft/versions/1.16.2/1.16.2.jar'
+resource_pack = 'yourpath/.minecraft/versions/1.16.2/1.16.2.jar'
 ```
 
-Run `voxi load examples` to use the local textures and the daytime plains sky.
-Voxilog also reads lever, repeater, comparator, and inventory item models from
-the client JAR. Missing assets use the bundled look. Remove `resource_pack`
-to use bundled assets throughout.
+## Placement hotkeys
+
+Hold `G` to offset placement or `H` to rotate, aim at a sector of the block
+face, and right-click. Rebind them in the same config file.
+
+```toml
+[keys.world]
+placement_offset = 'G'
+placement_rotation = 'H'
+```
 
 ## C API reference
 

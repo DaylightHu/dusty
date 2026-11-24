@@ -542,6 +542,34 @@ static RsResult apply_recorded_plan(RegionEditor *e, EditPlan *plan, size_t *cha
     return result;
 }
 
+RsResult region_editor_replace(RegionEditor *e, BlockId from, BlockId to,
+                                size_t *changed)
+{
+    if (changed) *changed=0;
+    RegionBounds bounds;
+    RsResult result=selected_bounds(e,&bounds);
+    if (result!=RS_OK) return result;
+    if ((unsigned)from>=BLOCK_INTERNAL_FIRST || (unsigned)to>=BLOCK_INTERNAL_FIRST)
+        return RS_INVALID_ARGUMENT;
+    if (from==to) return RS_OK;
+
+    BlockState after=block_default(to);
+    const StoredContainer empty={0};
+    const StoredContainer *contents=container_is_block(to) ? &empty : NULL;
+    EditPlan plan={0};
+    for (size_t i=0; i<bounds.volume && result==RS_OK; ++i) {
+        BlockPos pos=cell_pos(bounds,i);
+        BlockState before=world_get(e->world,pos);
+        result=world_result(e->world);
+        if (result==RS_OK && before.id==from)
+            result=plan_cell(e,&plan,pos,after,contents);
+    }
+    if (result==RS_OK && plan.count)
+        result=apply_recorded_plan(e,&plan,changed);
+    plan_destroy(&plan);
+    return result;
+}
+
 static RsResult replay_history(RegionEditor *e, bool redo, size_t *changed)
 {
     if (changed) *changed=0;

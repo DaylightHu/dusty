@@ -16,6 +16,7 @@ enum { CTRL=1, SHIFT=2, ALT=4, SUPER=8, KEY_COUNT=512,
 static const char *actions[] = {
     "forward", "backward", "left", "right", "up", "down", "inventory", "pause",
     "command", "look_left", "look_right", "look_up", "look_down", "roll_left",
+    "placement_offset", "placement_rotation",
     "slot_1", "slot_2", "slot_3", "slot_4", "slot_5", "slot_6", "slot_7",
     "slot_8", "slot_9"
 };
@@ -102,9 +103,10 @@ static bool add_binding(Config *config,const char *name,const char *text)
     if (!parse_trigger(text,&trigger))
         return fail("keys.world.%s: invalid binding '%s'",name,text);
     bool continuous=(!strcmp(name,"forward") || !strcmp(name,"backward") || !strcmp(name,"left") || !strcmp(name,"right") ||
-         !strcmp(name,"up") || !strcmp(name,"down") || !strncmp(name,"look_",5) || !strcmp(name,"roll_left"));
+         !strcmp(name,"up") || !strcmp(name,"down") || !strncmp(name,"look_",5) || !strcmp(name,"roll_left") ||
+         !strncmp(name,"placement_",10));
     if (continuous && trigger.character && !isalnum(trigger.character) && !strchr("[];',./`-=\\",trigger.character))
-        return fail("keys.world.%s: held movement needs a letter, digit, unshifted key or named key",name);
+        return fail("keys.world.%s: held actions need a letter, digit, unshifted key or named key",name);
     config->bindings[config->count++]=(Binding){.action=(size_t)action,.trigger=trigger};
     return true;
 }
@@ -118,6 +120,7 @@ static void defaults(Config *config)
         {"inventory","e"},{"pause","Escape"},{"command","/"},
         {"look_left","Left"},{"look_right","Right"},{"look_up","Up"},
         {"look_down","Down"},{"roll_left","q"},
+        {"placement_offset","g"},{"placement_rotation","h"},
         {"slot_1","1"},{"slot_2","2"},{"slot_3","3"},{"slot_4","4"},{"slot_5","5"},
         {"slot_6","6"},{"slot_7","7"},{"slot_8","8"},{"slot_9","9"}
     };
@@ -287,6 +290,9 @@ static bool read_bindings(Config *next,toml_datum_t root)
     for (size_t i = 0; i < next->count; ++i) {
         for (size_t j = 0; j < i; ++j) {
             Binding *a = &next->bindings[i], *b = &next->bindings[j];
+            /* Configs predating these actions could also bind G or H. */
+            if ((!a->line && !strncmp(actions[a->action],"placement_",10)) ||
+                (!b->line && !strncmp(actions[b->action],"placement_",10))) continue;
             if (a->trigger.key == b->trigger.key &&
                 a->trigger.character == b->trigger.character &&
                 a->trigger.mods == b->trigger.mods)

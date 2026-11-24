@@ -353,7 +353,7 @@ static RsResult run_gui_edit(GuiApp *app, const EditCommand *command)
 static bool flexible_placement_held(BlockId selected)
 {
     return selected > BLOCK_AIR && selected < BLOCK_INTERNAL_FIRST &&
-           (IsKeyDown(KEY_G) || IsKeyDown(KEY_H));
+           (app_input_world("placement_offset",true) || app_input_world("placement_rotation",true));
 }
 
 static void apply_edit(GuiApp *app, VoxelHit hit, BlockId selected, bool place,
@@ -378,7 +378,8 @@ static void apply_edit(GuiApp *app, VoxelHit hit, BlockId selected, bool place,
             return;
         }
         PlacementTarget plan = flexible_placement_target(hit, selected, facing,
-            camera_direction(&app->camera), IsKeyDown(KEY_G), IsKeyDown(KEY_H));
+            camera_direction(&app->camera), app_input_world("placement_offset",true),
+            app_input_world("placement_rotation",true));
         if (!plan.valid) {
             snprintf(app->message, sizeof(app->message),
                      "%s does not support that direction", block_name(selected));
@@ -511,7 +512,7 @@ static void update_command(GuiApp *app)
     } else {
         error = true;
         snprintf(app->message, sizeof(app->message),
-                 "Use pos1|pos2|copy|paste|stack|move|undo|redo, schem save|load, tick freeze|step|noupdate, or plot info|expand|shrink");
+                 "Use pos1|pos2|copy|paste|stack|move|replace|undo|redo, schem save|load, tick freeze|step|noupdate, or plot info|expand|shrink");
     }
     add_chat_message(app, app->message, error);
     if (app->plot_command.pending) {
@@ -1033,7 +1034,7 @@ static void draw_flexible_placement(GuiApp *app, VoxelHit hit)
         !flexible_placement_held(selected)) return;
     PlacementTarget plan = flexible_placement_target(hit, selected,
         camera_horizontal_direction(&app->camera), camera_direction(&app->camera),
-        IsKeyDown(KEY_G), IsKeyDown(KEY_H));
+        app_input_world("placement_offset",true), app_input_world("placement_rotation",true));
     if ((unsigned)plan.right >= DIR_COUNT) return;
     World *world = game_session_world(app->session);
     bool available = plan.valid && world_in_bounds(world, plan.pos) &&
@@ -1067,7 +1068,7 @@ static void draw_flexible_placement(GuiApp *app, VoxelHit hit)
     }
     Vector3 center = {(float)plan.pos.x, (float)plan.pos.y, (float)plan.pos.z};
     DrawCubeWires(center, 1.002f, 1.002f, 1.002f, color);
-    if (IsKeyDown(KEY_H) && plan.directional) {
+    if (app_input_world("placement_rotation",true) && plan.directional) {
         Vector3 direction = placement_axis(plan.direction);
         Direction wing_axis = plan.direction == plan.up ||
             direction_opposite(plan.direction) == plan.up ? plan.right : plan.up;

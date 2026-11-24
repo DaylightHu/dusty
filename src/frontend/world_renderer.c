@@ -13,7 +13,7 @@
 enum { REGION_SIZE = 16 };
 enum {
     SOLIDS, IRON, GLASS, DUST, REPEATERS, COMPARATORS,
-    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, TRANSLUCENT, PARTS
+    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, PISTONS, TRANSLUCENT, PARTS
 };
 
 typedef struct {
@@ -59,12 +59,13 @@ static int part_for(unsigned id)
     case BLOCK_BLUE_CONCRETE: case BLOCK_GRAY_CONCRETE:
     case BLOCK_GREEN_CONCRETE: case BLOCK_PURPLE_CONCRETE:
     case BLOCK_YELLOW_CONCRETE:
-    case BLOCK_PISTON: case BLOCK_STICKY_PISTON: case BLOCK_BARREL:
+    case BLOCK_BARREL:
     case BLOCK_NOTE_BLOCK:
     case BLOCK_TARGET: case BLOCK_HOPPER: case BLOCK_DROPPER:
     case BLOCK_REDSTONE_LAMP:
-    case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD:
         return SOLIDS;
+    case BLOCK_PISTON: case BLOCK_STICKY_PISTON:
+    case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD: return PISTONS;
     case BLOCK_GLASS: return GLASS;
     case BLOCK_SLIME: case BLOCK_HONEY: return TRANSLUCENT;
     case BLOCK_REDSTONE_WIRE: return DUST;
@@ -80,7 +81,7 @@ static int part_for(unsigned id)
 
 static bool solid_part(int kind)
 {
-    return kind == SOLIDS || kind == IRON;
+    return kind == SOLIDS || kind == IRON || kind == PISTONS;
 }
 
 static bool cube_part(int kind)
@@ -92,6 +93,7 @@ static void dirty_solid_parts(RenderRegion *region)
 {
     region->parts[SOLIDS].dirty = true;
     region->parts[IRON].dirty = true;
+    region->parts[PISTONS].dirty = true;
     region->parts[TRANSLUCENT].dirty = true;
 }
 
@@ -193,17 +195,11 @@ static void on_change(void *context, BlockPos p, BlockState before, BlockState a
                before.id == BLOCK_OBSERVER && after.id == BLOCK_OBSERVER) {
         visual = before.data.observer.facing != after.data.observer.facing ||
                  before.data.observer.powered != after.data.observer.powered;
-    } else if (old_part == new_part && new_part == SOLIDS &&
-               before.id == after.id &&
-               block_is_piston_base((BlockId)before.id)) {
-        geometry = before.data.piston.facing != after.data.piston.facing ||
-                   before.data.piston.extended != after.data.piston.extended;
-        visual = geometry ||
-                 before.data.piston.powered != after.data.piston.powered;
-    } else if (old_part == new_part && new_part == SOLIDS &&
-               before.id == after.id &&
-               block_is_piston_head((BlockId)before.id)) {
-        geometry = before.data.piston.facing != after.data.piston.facing;
+    } else if (old_part == new_part && new_part == PISTONS) {
+        geometry = before.id != after.id ||
+                   before.data.piston.facing != after.data.piston.facing ||
+                   (block_is_piston_base((BlockId)after.id) &&
+                    before.data.piston.extended != after.data.piston.extended);
         visual = geometry ||
                  before.data.piston.powered != after.data.piston.powered;
     } else if (old_part == new_part && new_part == SOLIDS &&
@@ -466,7 +462,7 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
         blocks->atlas, blocks->iron_texture, blocks->glass_texture, blocks->wire_atlas,
         blocks->repeater_atlas, blocks->comparator_atlas,
         blocks->powered_rail_atlas, blocks->activator_rail_atlas,
-        blocks->torch_atlas, blocks->lever_atlas, blocks->atlas
+        blocks->torch_atlas, blocks->lever_atlas, blocks->atlas, blocks->atlas
     };
     if (minecraft_redstone_has(blocks->minecraft, BLOCK_LEVER))
         textures[LEVERS] = blocks->minecraft_atlas;
@@ -474,6 +470,8 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
         textures[REPEATERS] = blocks->minecraft_atlas;
     if (minecraft_redstone_has(blocks->minecraft, BLOCK_REDSTONE_COMPARATOR))
         textures[COMPARATORS] = blocks->minecraft_atlas;
+    if (minecraft_redstone_has(blocks->minecraft, BLOCK_PISTON))
+        textures[PISTONS] = blocks->minecraft_atlas;
     for (int kind = 0; kind < PARTS; ++kind) {
         r->materials[kind] = LoadMaterialDefault();
         if (!r->materials[kind].maps) { world_renderer_destroy(r); return NULL; }

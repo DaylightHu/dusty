@@ -7,8 +7,10 @@
 #include <string.h>
 
 enum {
-    LEVER, REPEATER, COMPARATOR, FAMILY_COUNT,
+    LEVER, REPEATER, COMPARATOR, PISTON, FAMILY_COUNT,
     LEVER_VARIANTS = 24, REPEATER_VARIANTS = 64, COMPARATOR_VARIANTS = 16,
+    PISTON_BASE_VARIANTS = 2*DIR_COUNT, PISTON_HEAD_FIRST = 2*PISTON_BASE_VARIANTS,
+    PISTON_VARIANTS = PISTON_HEAD_FIRST + 2*DIR_COUNT,
     KEY_SIZE = 84, ATLAS_TILE = 32, ATLAS_COLUMNS = 8, ATLAS_ROWS = 4,
     ATLAS_TEXTURES = ATLAS_COLUMNS*ATLAS_ROWS
 };
@@ -29,6 +31,8 @@ static unsigned family(BlockId id)
     case BLOCK_LEVER: return LEVER;
     case BLOCK_REDSTONE_REPEATER: return REPEATER;
     case BLOCK_REDSTONE_COMPARATOR: return COMPARATOR;
+    case BLOCK_PISTON: case BLOCK_STICKY_PISTON:
+    case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD: return PISTON;
     default: return FAMILY_COUNT;
     }
 }
@@ -46,6 +50,7 @@ static unsigned horizontal(Direction direction)
 static void variant_keys(unsigned kind, char keys[][KEY_SIZE], unsigned count)
 {
     static const char *const directions[] = {"north","east","south","west"};
+    static const char *const axes[] = {"east","west","up","down","south","north"};
     static const char *const faces[] = {"floor","wall","ceiling"};
     static const char *const flags[] = {"false","true"};
     for (unsigned i = 0; i < count; ++i) {
@@ -62,6 +67,15 @@ static void variant_keys(unsigned kind, char keys[][KEY_SIZE], unsigned count)
         case COMPARATOR:
             snprintf(keys[i], KEY_SIZE, "facing=%s,mode=%s,powered=%s",
                      directions[(i/4 + 2)%4], i/2%2 ? "subtract" : "compare", flags[i%2]);
+            break;
+        case PISTON:
+            if (i < PISTON_HEAD_FIRST) {
+                snprintf(keys[i], KEY_SIZE, "extended=%s,facing=%s",
+                         flags[(i/DIR_COUNT)%2], axes[i%DIR_COUNT]);
+            } else {
+                snprintf(keys[i], KEY_SIZE, "facing=%s,short=false,type=%s",
+                         axes[i%DIR_COUNT], i-PISTON_HEAD_FIRST < DIR_COUNT ? "normal" : "sticky");
+            }
             break;
         }
     }
@@ -126,15 +140,21 @@ static bool bake_variant(const ResourcePack *pack, Atlas *atlas,
 
 static BlockGeometry *load_family(const ResourcePack *pack, Atlas *atlas, unsigned kind)
 {
-    static const unsigned counts[] = {LEVER_VARIANTS, REPEATER_VARIANTS, COMPARATOR_VARIANTS};
-    static const char *const names[] = {"lever", "repeater", "comparator"};
+    static const unsigned counts[] = {LEVER_VARIANTS, REPEATER_VARIANTS, COMPARATOR_VARIANTS, PISTON_VARIANTS};
+    static const char *const names[] = {"lever", "repeater", "comparator", "piston"};
     char keys[REPEATER_VARIANTS][KEY_SIZE];
     const char *key_paths[REPEATER_VARIANTS];
     MinecraftVariant variants[REPEATER_VARIANTS];
     unsigned count = counts[kind];
     variant_keys(kind, keys, count);
     for (unsigned i = 0; i < count; ++i) key_paths[i] = keys[i];
-    if (!minecraft_variants_read(pack, names[kind], key_paths, variants, count)) return NULL;
+    if (kind == PISTON) {
+        if (!minecraft_variants_read(pack, "piston", key_paths, variants, PISTON_BASE_VARIANTS) ||
+            !minecraft_variants_read(pack, "sticky_piston", key_paths + PISTON_BASE_VARIANTS,
+                                     variants + PISTON_BASE_VARIANTS, PISTON_BASE_VARIANTS) ||
+            !minecraft_variants_read(pack, "piston_head", key_paths + PISTON_HEAD_FIRST,
+                                     variants + PISTON_HEAD_FIRST, 2*DIR_COUNT)) return NULL;
+    } else if (!minecraft_variants_read(pack, names[kind], key_paths, variants, count)) return NULL;
 
     BlockGeometry *baked = calloc(count, sizeof(*baked));
     if (!baked) return NULL;
@@ -204,9 +224,17 @@ const BlockGeometry *minecraft_redstone_geometry(const MinecraftRedstone *models
         if (delay < 1 || delay > 4) delay = 1;
         index = (delay-1)*16 + horizontal((Direction)state.data.repeater.facing)*4 +
             state.data.repeater.locked*2 + state.data.repeater.powered;
-    } else {
+    } else if (kind == COMPARATOR) {
         index = horizontal((Direction)state.data.comparator.facing)*4 +
             state.data.comparator.subtract*2 + state.data.comparator.powered;
+    } else {
+        unsigned facing = state.data.piston.facing;
+        if (facing >= DIR_COUNT) facing = DIR_NORTH;
+        if (block_is_piston_head((BlockId)state.id))
+            index = PISTON_HEAD_FIRST + (state.id == BLOCK_STICKY_PISTON_HEAD)*DIR_COUNT + facing;
+        else
+            index = (state.id == BLOCK_STICKY_PISTON)*PISTON_BASE_VARIANTS +
+                    state.data.piston.extended*DIR_COUNT + facing;
     }
     return &models->families[kind][index];
 }

@@ -51,6 +51,14 @@ static Direction direction_value(const char *text)
     return DIR_COUNT;
 }
 
+static BlockId block_value(const char *text)
+{
+    if (!strncmp(text,"minecraft:",10)) text+=10;
+    for (BlockId id=BLOCK_AIR; id<BLOCK_INTERNAL_FIRST; ++id)
+        if (!strcmp(text,block_name(id))) return id;
+    return BLOCK_COUNT;
+}
+
 bool edit_command_parse(const char *line, EditCommand *command)
 {
     if (!line || !command) return false;
@@ -60,7 +68,7 @@ bool edit_command_parse(const char *line, EditCommand *command)
     while (*line=='/' && slashes<3) { ++slashes; ++line; }
     if (slashes>2) return false;
     size_t name_length=strcspn(line," \t\r\n");
-    static const char *const names[]={"","pos1","pos2","copy","paste","stack","move","undo","redo","schem"};
+    static const char *const names[]={"","pos1","pos2","copy","paste","stack","move","undo","redo","replace","schem"};
     EditCommandKind kind=EDIT_INVALID;
     for (unsigned i=1;i<sizeof(names)/sizeof(names[0]);++i)
         if (strlen(names[i])==name_length && !strncmp(line,names[i],name_length)) kind=(EditCommandKind)i;
@@ -77,6 +85,16 @@ bool edit_command_parse(const char *line, EditCommand *command)
         args[count++]=cursor;
         cursor+=strcspn(cursor," \t\r\n");
         if (*cursor) *cursor++='\0';
+    }
+    if (kind==EDIT_REPLACE) {
+        if (count==2) {
+            command->replace_from=block_value(args[0]);
+            command->replace_to=block_value(args[1]);
+        } else {
+            command->replace_from=command->replace_to=BLOCK_COUNT;
+        }
+        command->kind=kind;
+        return true;
     }
     if (kind==EDIT_SCHEM_SAVE) {
         if (count==2 && !strcmp(args[0],"load")) {
@@ -289,8 +307,16 @@ RsResult edit_command_run(GameSession *session, const EditCommand *c,
         if (result==RS_OK) snprintf(message,capacity,"%s: %zu blocks changed",
             c->kind==EDIT_UNDO ? "Undid" : "Redid",changed);
         break;
+    case EDIT_REPLACE:
+        if (c->replace_from>=BLOCK_INTERNAL_FIRST || c->replace_to>=BLOCK_INTERNAL_FIRST) {
+            snprintf(message,capacity,"Use //replace BLOCK_A BLOCK_B with valid block names");
+            return RS_INVALID_ARGUMENT;
+        }
+        result=region_editor_replace(e,c->replace_from,c->replace_to,&changed);
+        if (result==RS_OK) snprintf(message,capacity,"Replaced: %zu blocks",changed);
+        break;
     default:
-        snprintf(message,capacity,"Use pos1|pos2|copy|paste|stack|move|undo|redo; //schem save [-f] NAME [X Y Z] or //schem load NAME");
+        snprintf(message,capacity,"Use pos1|pos2|copy|paste|stack|move|replace|undo|redo, or //schem save|load");
         return RS_INVALID_ARGUMENT;
     }
     if (result!=RS_OK) snprintf(message,capacity,"%s",region_editor_error(e)[0] ? region_editor_error(e) : rs_result_name(result));

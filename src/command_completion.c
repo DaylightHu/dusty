@@ -1,9 +1,10 @@
 #include "command_completion.h"
+#include "rs/block.h"
 
 #include <string.h>
 
 static const char *const shared_commands[] = {"tick", "plot"};
-static const char *const edit_commands[] = {"pos1", "pos2", "copy", "paste", "stack", "move", "undo", "redo", "schem"};
+static const char *const edit_commands[] = {"pos1", "pos2", "copy", "paste", "stack", "move", "undo", "redo", "replace", "schem"};
 static const char *const schem_commands[] = {"save", "load"};
 static const char *const schem_flags[] = {"-f"};
 static const char *const air_flags[] = {"-a"};
@@ -51,7 +52,7 @@ bool command_complete(CommandCompletion *state, char *line, size_t capacity)
     if (count == 1) word += slashes;
     size_t offset = (size_t)(word - copy);
     size_t prefix = strlen(word);
-    const char *choices[COUNT(shared_commands) + COUNT(edit_commands) + COUNT(directions)];
+    const char *choices[COUNT(shared_commands) + COUNT(edit_commands) + BLOCK_INTERNAL_FIRST];
     size_t choices_count = 0;
     bool directional_edit = strcmp(name, "stack") == 0 || strcmp(name, "move") == 0;
 #define ADD(array) do { \
@@ -60,6 +61,9 @@ bool command_complete(CommandCompletion *state, char *line, size_t capacity)
     if (count == 1) {
         if (slashes < 2) ADD(shared_commands);
         ADD(edit_commands);
+    } else if (count <= 3 && strcmp(name, "replace") == 0) {
+        for (BlockId id = BLOCK_AIR; id < BLOCK_INTERNAL_FIRST; ++id)
+            choices[choices_count++] = block_name(id);
     } else if (directional_edit || strcmp(name, "copy") == 0 || strcmp(name, "paste") == 0) {
         size_t arguments = 0;
         bool has_air_flag = false;
