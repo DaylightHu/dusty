@@ -1,5 +1,6 @@
 #include "inventory.h"
 #include "minecraft_model.h"
+#include "ui_colors.h"
 #include "ui_font.h"
 
 #include <stddef.h>
@@ -295,8 +296,8 @@ void inventory_draw(const Inventory *inventory, InventorySlot selected)
 
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){10, 18, 20, 155});
-    DrawRectangleRec(layout.panel, (Color){43, 43, 46, 255});
-    DrawRectangleLinesEx(layout.panel, 3.0f, (Color){84, 84, 91, 255});
+    DrawRectangleRec(layout.panel, UI_PANEL_FILL);
+    DrawRectangleLinesEx(layout.panel, 3.0f, UI_PANEL_BORDER);
 
     const char *title = "INVENTORY";
     int title_size = 25;
@@ -311,10 +312,9 @@ void inventory_draw(const Inventory *inventory, InventorySlot selected)
         bool under_mouse = CheckCollisionPointRec(mouse, slot);
         InventorySlot contents = occupied ? inventory->slots[index] :
                                             (InventorySlot){0};
-        Color fill = under_mouse && occupied ? (Color){102, 116, 112, 255}
-                                             : (Color){75, 75, 75, 235};
+        Color fill = under_mouse && occupied ? UI_SLOT_HOVER : UI_SLOT_FILL;
         DrawRectangleRec(slot, fill);
-        DrawRectangleLinesEx(slot, 1.0f, (Color){145, 145, 145, 255});
+        DrawRectangleLinesEx(slot, 1.0f, UI_SLOT_BORDER);
         if (occupied) inventory_draw_slot(inventory, contents, slot);
         bool same = contents.kind == selected.kind &&
                     ((contents.kind == INVENTORY_BLOCK &&
@@ -324,7 +324,7 @@ void inventory_draw(const Inventory *inventory, InventorySlot selected)
                      (contents.kind == INVENTORY_TOOL &&
                       contents.tool == selected.tool));
         if (same)
-            DrawRectangleLinesEx(slot, 3.0f, (Color){244, 190, 88, 255});
+            DrawRectangleLinesEx(slot, 3.0f, UI_ACCENT);
         if (under_mouse && occupied) hovered = contents;
     }
 

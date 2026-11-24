@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "ui_colors.h"
 #include "ui_font.h"
 #include "app_config.h"
 
@@ -142,11 +143,9 @@ static bool button_with_font(Rectangle rectangle, const char *label, bool enable
                              int font_size)
 {
     bool hovered = enabled && point_in(rectangle);
-    Color fill = enabled ? (hovered ? (Color){78, 101, 116, 255}
-                                    : (Color){55, 72, 84, 255})
+    Color fill = enabled ? (hovered ? UI_BUTTON_HOVER : UI_BUTTON_FILL)
                          : (Color){48, 48, 48, 190};
-    Color border = enabled ? (hovered ? (Color){244, 190, 88, 255}
-                                      : (Color){142, 158, 168, 255})
+    Color border = enabled ? (hovered ? UI_ACCENT : UI_BUTTON_BORDER)
                            : (Color){85, 85, 85, 180};
     Color text = enabled ? RAYWHITE : (Color){125, 125, 125, 255};
     DrawRectangleRec(rectangle, fill);
@@ -935,25 +934,23 @@ static void draw_container(const GuiApp *app, BlockId id)
     ContainerLayout layout = container_layout(id);
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){10, 18, 20, 155});
-    DrawRectangleRec(layout.panel, (Color){226, 218, 196, 250});
-    DrawRectangleLinesEx(layout.panel, 3.0f, (Color){73, 48, 24, 255});
+    DrawRectangleRec(layout.panel, UI_PANEL_FILL);
+    DrawRectangleLinesEx(layout.panel, 3.0f, UI_PANEL_BORDER);
     draw_centered(barrel ? "BARREL" : id == BLOCK_HOPPER ? "HOPPER" : "DROPPER",
                   (int)layout.panel.y + 18,
-                  26, (Color){73, 48, 24, 255});
+                  26, RAYWHITE);
     BlockState state = world_get(world, pos);
     int level = barrel && state.id == BLOCK_BARREL ? state.data.barrel.level : 0;
     if (barrel)
         draw_centered(TextFormat("Comparator output: %d", level),
-                      (int)layout.panel.y + 49, 17, (Color){100, 71, 36, 255});
+                      (int)layout.panel.y + 49, 17, UI_SECONDARY_TEXT);
 
     for (int index = 0; index < layout.columns*layout.rows; ++index) {
         Rectangle slot = container_slot_rectangle(layout, index);
         bool hovered = point_in(slot);
-        DrawRectangleRec(slot, hovered ? (Color){102, 116, 112, 255} :
-                                        (Color){75, 75, 75, 235});
+        DrawRectangleRec(slot, hovered ? UI_SLOT_HOVER : UI_SLOT_FILL);
         DrawRectangleLinesEx(slot, hovered ? 2.0f : 1.0f,
-                             hovered ? (Color){244, 190, 88, 255} :
-                                       (Color){145, 145, 145, 255});
+                             hovered ? UI_ACCENT : UI_SLOT_BORDER);
         ContainerStack stack;
         if (world_get_container_slot(world, pos, (size_t)index, &stack) == RS_OK)
             inventory_draw_stack(&app->inventory, stack, slot);
@@ -962,11 +959,10 @@ static void draw_container(const GuiApp *app, BlockId id)
         for (int value = 0; value <= 15; ++value) {
             Rectangle shortcut = barrel_signal_rectangle(layout, value);
             bool hovered = point_in(shortcut);
-            DrawRectangleRec(shortcut, hovered ? (Color){111, 79, 50, 255} :
-                                                (Color){82, 58, 37, 255});
-            DrawRectangleLinesEx(shortcut, value == level ? 3.0f : 1.0f,
-                                 value == level ? (Color){244, 190, 88, 255} :
-                                                  (Color){142, 119, 86, 255});
+            bool active = value == level;
+            DrawRectangleRec(shortcut, hovered ? UI_BUTTON_HOVER : UI_BUTTON_FILL);
+            DrawRectangleLinesEx(shortcut, active ? 3.0f : 1.0f,
+                                 active ? UI_ACCENT : UI_BUTTON_BORDER);
             const char *text = TextFormat("%d", value);
             ui_text_draw(text,
                      (int)(shortcut.x + (shortcut.width - ui_text_width(text, 16))*0.5f),
@@ -1290,8 +1286,8 @@ static void draw_pause(GuiApp *app)
 
     int center = GetScreenWidth()/2;
     Rectangle panel = {(float)center - 190, 105, 380, 330};
-    DrawRectangleRec(panel, (Color){43, 43, 46, 255});
-    DrawRectangleLinesEx(panel, 3.0f, (Color){84, 84, 91, 255});
+    DrawRectangleRec(panel, UI_PANEL_FILL);
+    DrawRectangleLinesEx(panel, 3.0f, UI_PANEL_BORDER);
     draw_centered("World menu", 137, 30, RAYWHITE);
 
     Rectangle resume = {(float)center - 140, 205, 280, 44};
