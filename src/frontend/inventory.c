@@ -1,4 +1,3 @@
-#include "gui.h"
 #include "inventory.h"
 #include "minecraft_model.h"
 #include "ui_font.h"
@@ -20,7 +19,6 @@ _Static_assert(INVENTORY_COLUMNS*INVENTORY_ROWS == INVENTORY_SLOT_COUNT,
 
 typedef struct {
     BlockId id;
-    const char *path;
     const char *minecraft_model;
 } BlockTexture;
 
@@ -31,32 +29,32 @@ typedef struct {
 } InventoryLayout;
 
 static const BlockTexture block_textures[] = {
-    {BLOCK_IRON, "res/textures/item/white_concrete.png", "white_concrete"},
-    {BLOCK_BLUE_CONCRETE, "res/textures/item/blue_concrete.png", "blue_concrete"},
-    {BLOCK_GRAY_CONCRETE, "res/textures/item/gray_concrete.png", "gray_concrete"},
-    {BLOCK_GREEN_CONCRETE, "res/textures/item/green_concrete.png", "green_concrete"},
-    {BLOCK_PURPLE_CONCRETE, "res/textures/item/purple_concrete.png", "purple_concrete"},
-    {BLOCK_YELLOW_CONCRETE, "res/textures/item/yellow_concrete.png", "yellow_concrete"},
-    {BLOCK_GLASS, "res/textures/item/glass.png", "glass"},
-    {BLOCK_REDSTONE_BLOCK, "res/textures/item/redstone_block.png", "redstone_block"},
-    {BLOCK_REDSTONE_WIRE, "res/textures/item/redstone_wire.png", "redstone"},
-    {BLOCK_REDSTONE_TORCH, "res/textures/item/redstone_torch.png", "redstone_torch"},
-    {BLOCK_REDSTONE_REPEATER, "res/textures/item/redstone_repeater.png", "repeater"},
-    {BLOCK_REDSTONE_COMPARATOR, "res/textures/item/redstone_comparator.png", "comparator"},
-    {BLOCK_POWERED_RAIL, "res/textures/item/powered_rail.png", "powered_rail"},
-    {BLOCK_ACTIVATOR_RAIL, "res/textures/item/activator_rail.png", "activator_rail"},
-    {BLOCK_OBSERVER, "res/textures/item/observer.png", "observer"},
-    {BLOCK_PISTON, "res/textures/item/piston.png", "piston"},
-    {BLOCK_STICKY_PISTON, "res/textures/item/sticky_piston.png", "sticky_piston"},
-    {BLOCK_BARREL, "res/textures/item/barrel.png", "barrel"},
-    {BLOCK_SLIME, "res/textures/item/slime_block.png", "slime_block"},
-    {BLOCK_HONEY, "res/textures/item/honey_block.png", "honey_block"},
-    {BLOCK_NOTE_BLOCK, "res/textures/item/note_block.png", "note_block"},
-    {BLOCK_TARGET, "res/textures/item/target_block.png", "target"},
-    {BLOCK_HOPPER, "res/textures/item/hopper.png", "hopper"},
-    {BLOCK_DROPPER, "res/textures/item/dropper.png", "dropper"},
-    {BLOCK_REDSTONE_LAMP, "res/textures/item/redstone_lamp.png", "redstone_lamp"},
-    {BLOCK_LEVER, "res/textures/block/lever0.png", "lever"}
+    {BLOCK_IRON, "white_concrete"},
+    {BLOCK_BLUE_CONCRETE, "blue_concrete"},
+    {BLOCK_GRAY_CONCRETE, "gray_concrete"},
+    {BLOCK_GREEN_CONCRETE, "green_concrete"},
+    {BLOCK_PURPLE_CONCRETE, "purple_concrete"},
+    {BLOCK_YELLOW_CONCRETE, "yellow_concrete"},
+    {BLOCK_GLASS, "glass"},
+    {BLOCK_REDSTONE_BLOCK, "redstone_block"},
+    {BLOCK_REDSTONE_WIRE, "redstone"},
+    {BLOCK_REDSTONE_TORCH, "redstone_torch"},
+    {BLOCK_REDSTONE_REPEATER, "repeater"},
+    {BLOCK_REDSTONE_COMPARATOR, "comparator"},
+    {BLOCK_POWERED_RAIL, "powered_rail"},
+    {BLOCK_ACTIVATOR_RAIL, "activator_rail"},
+    {BLOCK_OBSERVER, "observer"},
+    {BLOCK_PISTON, "piston"},
+    {BLOCK_STICKY_PISTON, "sticky_piston"},
+    {BLOCK_BARREL, "barrel"},
+    {BLOCK_SLIME, "slime_block"},
+    {BLOCK_HONEY, "honey_block"},
+    {BLOCK_NOTE_BLOCK, "note_block"},
+    {BLOCK_TARGET, "target"},
+    {BLOCK_HOPPER, "hopper"},
+    {BLOCK_DROPPER, "dropper"},
+    {BLOCK_REDSTONE_LAMP, "redstone_lamp"},
+    {BLOCK_LEVER, "lever"}
 };
 
 static const char *const minecraft_icons[BLOCK_COUNT] = {
@@ -75,12 +73,13 @@ static const char *const minecraft_icons[BLOCK_COUNT] = {
     [BLOCK_HOPPER] = "item/hopper.png"
 };
 
-static Image load_icon(const ResourcePack *pack, const char *model, const char *minecraft,
-                        const char *bundled)
+static Image load_icon(const ResourcePack *pack, const char *model, const char *texture)
 {
     Image image = minecraft_item_image(pack, model);
-    if (!image.data) image = resource_pack_image(pack, minecraft);
-    return image.data ? image : LoadImage(gui_asset_path(bundled));
+    if (!image.data) image = resource_pack_image(pack, texture);
+    if (!image.data)
+        TraceLog(LOG_ERROR, "INVENTORY: Cannot load %s from the resource pack", model);
+    return image;
 }
 
 static InventoryLayout inventory_layout(void)
@@ -137,11 +136,11 @@ bool inventory_init(Inventory *inventory, const ResourcePack *pack)
 
     for (size_t index = 0; index < count; ++index) {
         BlockTexture item = block_textures[index];
-        Image icon = load_icon(pack, item.minecraft_model, minecraft_icons[item.id], item.path);
+        Image icon = load_icon(pack, item.minecraft_model, minecraft_icons[item.id]);
         Texture2D texture = LoadTextureFromImage(icon);
         if (icon.data) UnloadImage(icon);
         if (!texture.id) {
-            TraceLog(LOG_ERROR, "INVENTORY: Cannot load %s", item.path);
+            TraceLog(LOG_ERROR, "INVENTORY: Cannot create the %s texture", item.minecraft_model);
             inventory_unload(inventory);
             return false;
         }
@@ -151,8 +150,7 @@ bool inventory_init(Inventory *inventory, const ResourcePack *pack)
             .kind = INVENTORY_BLOCK, .block = item.id
         };
     }
-    Image potato = load_icon(pack, "poisonous_potato", "item/poisonous_potato.png",
-                             "res/textures/item/poisonous_potato.png");
+    Image potato = load_icon(pack, "poisonous_potato", "item/poisonous_potato.png");
     if (!potato.data) {
         inventory_unload(inventory);
         return false;
@@ -171,8 +169,7 @@ bool inventory_init(Inventory *inventory, const ResourcePack *pack)
         .stack = {ITEM_POISONOUS_POTATO, 1,
                   item_stack_limit(ITEM_POISONOUS_POTATO)}
     };
-    Image axe = load_icon(pack, "wooden_axe", "item/wooden_axe.png",
-                          "res/textures/item/wooden_axe.png");
+    Image axe = load_icon(pack, "wooden_axe", "item/wooden_axe.png");
     if (!axe.data) { inventory_unload(inventory); return false; }
     ImageAlphaCrop(&axe, 0.0f);
     texture = LoadTextureFromImage(axe);

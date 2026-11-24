@@ -93,7 +93,6 @@ static void dirty_solid_parts(RenderRegion *region)
 {
     region->parts[SOLIDS].dirty = true;
     region->parts[IRON].dirty = true;
-    region->parts[PISTONS].dirty = true;
     region->parts[TRANSLUCENT].dirty = true;
 }
 
@@ -172,19 +171,6 @@ static void on_change(void *context, BlockPos p, BlockState before, BlockState a
     } else if (old_part == new_part && new_part == TORCHES) {
         geometry = before.data.torch.support_dir != after.data.torch.support_dir;
         visual = geometry || before.data.torch.lit != after.data.torch.lit;
-    } else if (old_part == new_part && new_part == LEVERS) {
-        geometry = before.data.lever.support_dir != after.data.lever.support_dir ||
-                   before.data.lever.facing != after.data.lever.facing;
-        visual = geometry ||
-                 before.data.lever.powered != after.data.lever.powered;
-    } else if (old_part == new_part && new_part == REPEATERS) {
-        visual = before.data.repeater.facing != after.data.repeater.facing ||
-                 before.data.repeater.delay != after.data.repeater.delay ||
-                 before.data.repeater.powered != after.data.repeater.powered;
-    } else if (old_part == new_part && new_part == COMPARATORS) {
-        visual = before.data.comparator.facing != after.data.comparator.facing ||
-                 before.data.comparator.subtract != after.data.comparator.subtract ||
-                 before.data.comparator.powered != after.data.comparator.powered;
     } else if (old_part == new_part &&
                (new_part == POWERED_RAILS || new_part == ACTIVATOR_RAILS)) {
         geometry = before.data.rail.facing != after.data.rail.facing ||
@@ -195,27 +181,20 @@ static void on_change(void *context, BlockPos p, BlockState before, BlockState a
                before.id == BLOCK_OBSERVER && after.id == BLOCK_OBSERVER) {
         visual = before.data.observer.facing != after.data.observer.facing ||
                  before.data.observer.powered != after.data.observer.powered;
-    } else if (old_part == new_part && new_part == PISTONS) {
-        geometry = before.id != after.id ||
-                   before.data.piston.facing != after.data.piston.facing ||
-                   (block_is_piston_base((BlockId)after.id) &&
-                    before.data.piston.extended != after.data.piston.extended);
-        visual = geometry ||
-                 before.data.piston.powered != after.data.piston.powered;
     } else if (old_part == new_part && new_part == SOLIDS &&
                before.id == BLOCK_HOPPER && after.id == BLOCK_HOPPER) {
         geometry = before.data.hopper.facing != after.data.hopper.facing;
         visual = geometry;
     } else if (old_part == new_part && new_part == SOLIDS &&
                before.id == BLOCK_DROPPER && after.id == BLOCK_DROPPER) {
-        visual = before.data.dropper.facing != after.data.dropper.facing ||
-                 before.data.dropper.triggered != after.data.dropper.triggered;
+        visual = before.data.dropper.facing != after.data.dropper.facing;
     } else if (old_part == new_part && new_part == SOLIDS &&
                before.id == BLOCK_REDSTONE_LAMP && after.id == BLOCK_REDSTONE_LAMP) {
         visual = before.data.lamp.lit != after.data.lamp.lit;
     } else if (old_part == new_part && new_part == SOLIDS &&
                before.id == BLOCK_BARREL && after.id == BLOCK_BARREL) {
-        visual = before.data.barrel.facing != after.data.barrel.facing;
+        visual = before.data.barrel.facing != after.data.barrel.facing ||
+                 before.data.barrel.open != after.data.barrel.open;
     }
     cell->state = after;
     if (!visual && !geometry) return;
@@ -299,13 +278,9 @@ static bool rebuild_part(WorldRenderer *r, size_t region_id, int kind)
                 visible_faces(r,p));
             quads += cell->state.id == BLOCK_HOPPER ? HOPPER_QUAD_COUNT :
                      (int)bit_count(cell->solid_faces);
-            if (block_is_piston_head((BlockId)cell->state.id)) quads += 4;
         } else if (kind == DUST) quads += 1+(int)bit_count(wire_sides(cell->state));
-        else if (kind == REPEATERS || kind == COMPARATORS)
-            quads += REDSTONE_GATE_GEOMETRY_QUADS;
         else if (kind == POWERED_RAILS || kind == ACTIVATOR_RAILS)
             quads += 1;
-        else if (kind == LEVERS) quads += 1;
         else quads += 6;
     }
 
@@ -460,18 +435,10 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
     r->blocks = blocks; r->world = world; r->topology_revision = UINT64_MAX;
     Texture2D textures[] = {
         blocks->atlas, blocks->iron_texture, blocks->glass_texture, blocks->wire_atlas,
-        blocks->repeater_atlas, blocks->comparator_atlas,
+        blocks->minecraft_atlas, blocks->minecraft_atlas,
         blocks->powered_rail_atlas, blocks->activator_rail_atlas,
-        blocks->torch_atlas, blocks->lever_atlas, blocks->atlas, blocks->atlas
+        blocks->torch_atlas, blocks->minecraft_atlas, blocks->minecraft_atlas, blocks->atlas
     };
-    if (minecraft_redstone_has(blocks->minecraft, BLOCK_LEVER))
-        textures[LEVERS] = blocks->minecraft_atlas;
-    if (minecraft_redstone_has(blocks->minecraft, BLOCK_REDSTONE_REPEATER))
-        textures[REPEATERS] = blocks->minecraft_atlas;
-    if (minecraft_redstone_has(blocks->minecraft, BLOCK_REDSTONE_COMPARATOR))
-        textures[COMPARATORS] = blocks->minecraft_atlas;
-    if (minecraft_redstone_has(blocks->minecraft, BLOCK_PISTON))
-        textures[PISTONS] = blocks->minecraft_atlas;
     for (int kind = 0; kind < PARTS; ++kind) {
         r->materials[kind] = LoadMaterialDefault();
         if (!r->materials[kind].maps) { world_renderer_destroy(r); return NULL; }

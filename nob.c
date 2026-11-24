@@ -649,9 +649,8 @@ static bool package_mac_gui(const char *binary)
         !copy_if_newer("packaging/macos/mcmux.icns", MAC_APP "/Contents/Resources/mcmux.icns"))
         return false;
 
-    Nob_Cmd copy = {0};
-    nob_cmd_append(&copy, "ditto", "res", MAC_APP "/Contents/Resources/res");
-    return nob_cmd_run(&copy);
+    /* Drop game assets left by a previous build of the bundle. */
+    return remove_tree(MAC_APP "/Contents/Resources/res");
 }
 #elif defined(_WIN32)
 static bool compile_gui_icon(Files *objects)

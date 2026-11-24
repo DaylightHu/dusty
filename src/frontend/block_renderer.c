@@ -1,6 +1,5 @@
 #include "block_renderer.h"
 #include "minecraft_redstone.h"
-#include "gui.h"
 #include "rlgl.h"
 #include "external/glad.h"
 #include "hopper_shape.h"
@@ -13,34 +12,26 @@ enum {
     OBSERVER_TEXTURES = 4,
     OBSERVER_STATES = 2,
     OBSERVER_TILE_FIRST = 1,
-    PISTON_TILE_FIRST = OBSERVER_TILE_FIRST +
-                        OBSERVER_TEXTURES*OBSERVER_STATES,
-    PISTON_TEXTURES = 5,
-    STICKY_PISTON_TILE_FIRST = PISTON_TILE_FIRST + PISTON_TEXTURES,
-    BARREL_TILE_FIRST = STICKY_PISTON_TILE_FIRST + PISTON_TEXTURES,
-    BARREL_TEXTURES = 3,
+    BARREL_TILE_FIRST = OBSERVER_TILE_FIRST + OBSERVER_TEXTURES*OBSERVER_STATES,
+    BARREL_TEXTURES = 4,
     SLIME_TILE = BARREL_TILE_FIRST + BARREL_TEXTURES,
     NOTE_BLOCK_TILE = SLIME_TILE + 1,
     HONEY_TILE = NOTE_BLOCK_TILE + 1,
-    TARGET_TILE = HONEY_TILE + 1,
-    HOPPER_OUTSIDE_TILE = TARGET_TILE + 1,
+    TARGET_SIDE_TILE = HONEY_TILE + 1,
+    TARGET_TOP_TILE = TARGET_SIDE_TILE + 1,
+    HOPPER_OUTSIDE_TILE = TARGET_TOP_TILE + 1,
     HOPPER_INSIDE_TILE = HOPPER_OUTSIDE_TILE + 1,
     DROPPER_FRONT_TILE = HOPPER_INSIDE_TILE + 1,
-    DROPPER_BACK0_TILE = DROPPER_FRONT_TILE + 1,
-    DROPPER_BACK1_TILE = DROPPER_BACK0_TILE + 1,
-    DROPPER_SIDE0_TILE = DROPPER_BACK1_TILE + 1,
-    DROPPER_SIDE1_TILE = DROPPER_SIDE0_TILE + 1,
-    LAMP_OFF_TILE = DROPPER_SIDE1_TILE + 1,
+    DROPPER_VERTICAL_FRONT_TILE = DROPPER_FRONT_TILE + 1,
+    DROPPER_TOP_TILE = DROPPER_VERTICAL_FRONT_TILE + 1,
+    DROPPER_SIDE_TILE = DROPPER_TOP_TILE + 1,
+    LAMP_OFF_TILE = DROPPER_SIDE_TILE + 1,
     LAMP_ON_TILE = LAMP_OFF_TILE + 1,
     BLUE_CONCRETE_TILE = LAMP_ON_TILE + 1,
     TILE_COUNT = BLUE_CONCRETE_TILE + 5
 };
 enum { OBSERVER_BACK, OBSERVER_FRONT, OBSERVER_SIDE, OBSERVER_TOP };
-enum {
-    PISTON_BOTTOM0, PISTON_BOTTOM1,
-    PISTON_SIDE0, PISTON_SIDE1, PISTON_TOP
-};
-enum { BARREL_SIDE, BARREL_TOP, BARREL_TOP_OPEN };
+enum { BARREL_SIDE, BARREL_TOP, BARREL_TOP_OPEN, BARREL_BOTTOM };
 enum {
     WIRE_SHAPES = 16, WIRE_STATES = 16,
     WIRE_SIDE_FIRST = WIRE_SHAPES*WIRE_STATES,
@@ -48,24 +39,10 @@ enum {
     WIRE_COLUMNS = 16,
     WIRE_ROWS = (WIRE_TILES + WIRE_COLUMNS - 1)/WIRE_COLUMNS
 };
-enum {
-    REPEATER_DELAYS = 4,
-    REPEATER_STATES = 2,
-    REPEATER_COLUMNS = REPEATER_DELAYS,
-    REPEATER_ROWS = REPEATER_STATES
-};
-enum {
-    COMPARATOR_MODES = 2,
-    COMPARATOR_STATES = 2,
-    COMPARATOR_COLUMNS = COMPARATOR_MODES,
-    COMPARATOR_ROWS = COMPARATOR_STATES
-};
-enum { RAIL_STATES = 2 };
+enum { ATLAS_STATES = 2 };
 
 static const float wire_offset = 0.002f;
-static const float redstone_gate_height = 2.0f/16.0f;
 static const float rail_offset = 0.003f;
-static const float lever_offset = 0.002f;
 static const Direction wire_directions[] = {
     DIR_EAST, DIR_WEST, DIR_SOUTH, DIR_NORTH
 };
@@ -106,11 +83,7 @@ static const CubeFace cube_faces[] = {
                     { 0.5f, -0.5f,  0.5f}, {-0.5f, -0.5f,  0.5f}}}
 };
 
-/* Vanilla 1.20.4-style torch: four full-texture side sheets and two caps.
- * Each source pixel covers 1/32 of a block. The supplied sprites have a
- * four-pixel-wide stem (x=14..17) and a body top at row 7. The lit sprite's
- * extra pixels extend beyond these sheets' central stem, including above
- * its cap; alpha discard removes every transparent pixel. */
+/* Vanilla torch model: four full-texture side sheets and two caps. */
 static const CubeFace torch_faces[] = {
     {{ 0,  0,  1}, {{-0.5f, 0,  0.0625f}, { 0.5f, 0,  0.0625f},
                     { 0.5f, 1,  0.0625f}, {-0.5f, 1,  0.0625f}}},
@@ -120,8 +93,8 @@ static const CubeFace torch_faces[] = {
                     { 0.0625f, 1, -0.5f}, { 0.0625f, 1,  0.5f}}},
     {{-1,  0,  0}, {{-0.0625f, 0, -0.5f}, {-0.0625f, 0,  0.5f},
                     {-0.0625f, 1,  0.5f}, {-0.0625f, 1, -0.5f}}},
-    {{ 0,  1,  0}, {{-0.0625f, 0.78125f,  0.0625f}, { 0.0625f, 0.78125f,  0.0625f},
-                    { 0.0625f, 0.78125f, -0.0625f}, {-0.0625f, 0.78125f, -0.0625f}}},
+    {{ 0,  1,  0}, {{-0.0625f, 0.625f,  0.0625f}, { 0.0625f, 0.625f,  0.0625f},
+                    { 0.0625f, 0.625f, -0.0625f}, {-0.0625f, 0.625f, -0.0625f}}},
     {{ 0, -1,  0}, {{-0.0625f, 0, -0.0625f}, { 0.0625f, 0, -0.0625f},
                     { 0.0625f, 0,  0.0625f}, {-0.0625f, 0,  0.0625f}}}
 };
@@ -131,30 +104,18 @@ typedef struct {
     Vector3 x_axis, y_axis, z_axis;
 } TorchTransform;
 
-static Image load_tile(const char *path)
-{
-    Image image = LoadImage(gui_asset_path(path));
-    if (!image.data) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot load %s", path);
-        return (Image){0};
-    }
-    if (image.width != TILE_SIZE || image.height != TILE_SIZE) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: %s must be %dx%d (got %dx%d)",
-                 path, TILE_SIZE, TILE_SIZE, image.width, image.height);
-        UnloadImage(image);
-        return (Image){0};
-    }
-    return image;
-}
-
 static Image load_pack_tile(const ResourcePack *pack, const char *path)
 {
     Image image = resource_pack_image(pack, path);
-    if (!image.data) return image;
+    if (!image.data) {
+        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot read %s from the resource pack", path);
+        return image;
+    }
     /* Animated block PNGs stack square frames vertically. Use the first frame. */
     if (image.height > image.width && image.height % image.width == 0)
         ImageCrop(&image, (Rectangle){0, 0, image.width, image.width});
     if (image.width != image.height) {
+        TraceLog(LOG_ERROR, "BLOCK TEXTURE: %s must have square frames", path);
         UnloadImage(image);
         return (Image){0};
     }
@@ -162,64 +123,43 @@ static Image load_pack_tile(const ResourcePack *pack, const char *path)
     return image;
 }
 
-static Image load_mapped_tile(const ResourcePack *pack, const char *bundled,
-                              const char *minecraft, int quarter_turn)
-{
-    Image image = load_pack_tile(pack, minecraft);
-    if (!image.data) return load_tile(bundled);
-    if (quarter_turn > 0) ImageRotateCW(&image);
-    if (quarter_turn < 0) ImageRotateCCW(&image);
-    return image;
-}
-
 static Image create_solid_atlas(const ResourcePack *pack)
 {
     static const struct {
-        const char *bundled, *minecraft;
+        const char *path;
         int quarter_turn;
     } tiles[] = {
-        {"res/textures/block/redstone_block.png", "block/redstone_block.png", 0},
-        {"res/textures/block/observer_back0.png", "block/observer_back.png", 0},
-        {"res/textures/block/observer_front0.png", "block/observer_front.png", 0},
-        {"res/textures/block/observer_side0.png", "block/observer_side.png", 1},
-        {"res/textures/block/observer_top0.png", "block/observer_top.png", 0},
-        {"res/textures/block/observer_back1.png", "block/observer_back_on.png", 0},
-        {"res/textures/block/observer_front1.png", "block/observer_front.png", 0},
-        {"res/textures/block/observer_side1.png", "block/observer_side.png", 1},
-        {"res/textures/block/observer_top1.png", "block/observer_top.png", 0},
-        /* The model atlas supplies the original piston UVs. These tiles
-         * belong to the bundled model and use its texture layout. */
-        {"res/textures/block/piston_bottom0.png", NULL, 0},
-        {"res/textures/block/piston_bottom1.png", NULL, 0},
-        {"res/textures/block/piston_side0.png", NULL, 0},
-        {"res/textures/block/piston_side1.png", NULL, 0},
-        {"res/textures/block/piston_top.png", NULL, 0},
-        {"res/textures/block/sticky_piston_bottom0.png", NULL, 0},
-        {"res/textures/block/sticky_piston_bottom1.png", NULL, 0},
-        {"res/textures/block/sticky_piston_side0.png", NULL, 0},
-        {"res/textures/block/sticky_piston_side1.png", NULL, 0},
-        {"res/textures/block/sticky_piston_top.png", NULL, 0},
-        {"res/textures/block/barrel_side.png", "block/barrel_side.png", -1},
-        {"res/textures/block/barrel_top.png", "block/barrel_top.png", 0},
-        {"res/textures/block/barrel_top_open.png", "block/barrel_top_open.png", 0},
-        {"res/textures/block/slime_block.png", "block/slime_block.png", 0},
-        {"res/textures/block/note_block.png", "block/note_block.png", 0},
-        {"res/textures/block/honey_block.png", "block/honey_block_side.png", 0},
-        {"res/textures/block/target_block.png", "block/target_side.png", 0},
-        {"res/textures/block/hopper_outside.png", "block/hopper_outside.png", 0},
-        {"res/textures/block/hopper_inside.png", "block/hopper_inside.png", 0},
-        {"res/textures/block/dropper_front.png", "block/dropper_front.png", 0},
-        {"res/textures/block/dropper_back0.png", "block/furnace_side.png", 0},
-        {"res/textures/block/dropper_back1.png", "block/furnace_side.png", 0},
-        {"res/textures/block/dropper_side0.png", "block/furnace_side.png", 1},
-        {"res/textures/block/dropper_side1.png", "block/furnace_side.png", 1},
-        {"res/textures/block/redstone_lamp0.png", "block/redstone_lamp.png", 0},
-        {"res/textures/block/redstone_lamp1.png", "block/redstone_lamp_on.png", 0},
-        {"res/textures/block/blue_concrete.png", "block/blue_concrete.png", 0},
-        {"res/textures/block/gray_concrete.png", "block/gray_concrete.png", 0},
-        {"res/textures/block/green_concrete.png", "block/green_concrete.png", 0},
-        {"res/textures/block/purple_concrete.png", "block/purple_concrete.png", 0},
-        {"res/textures/block/yellow_concrete.png", "block/yellow_concrete.png", 0},
+        {"block/redstone_block.png", 0},
+        {"block/observer_back.png", 0},
+        {"block/observer_front.png", 0},
+        {"block/observer_side.png", 1},
+        {"block/observer_top.png", 0},
+        {"block/observer_back_on.png", 0},
+        {"block/observer_front.png", 0},
+        {"block/observer_side.png", 1},
+        {"block/observer_top.png", 0},
+        {"block/barrel_side.png", -1},
+        {"block/barrel_top.png", 0},
+        {"block/barrel_top_open.png", 0},
+        {"block/barrel_bottom.png", 0},
+        {"block/slime_block.png", 0},
+        {"block/note_block.png", 0},
+        {"block/honey_block_side.png", 0},
+        {"block/target_side.png", 0},
+        {"block/target_top.png", 0},
+        {"block/hopper_outside.png", 0},
+        {"block/hopper_inside.png", 0},
+        {"block/dropper_front.png", 0},
+        {"block/dropper_front_vertical.png", 0},
+        {"block/furnace_top.png", 0},
+        {"block/furnace_side.png", 0},
+        {"block/redstone_lamp.png", 0},
+        {"block/redstone_lamp_on.png", 0},
+        {"block/blue_concrete.png", 0},
+        {"block/gray_concrete.png", 0},
+        {"block/green_concrete.png", 0},
+        {"block/purple_concrete.png", 0},
+        {"block/yellow_concrete.png", 0},
     };
     _Static_assert(sizeof(tiles)/sizeof(*tiles) == TILE_COUNT, "solid atlas tile count");
     Image sources[TILE_COUNT] = {0};
@@ -227,9 +167,10 @@ static Image create_solid_atlas(const ResourcePack *pack)
     Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
 
     for (int tile = 0; tile < TILE_COUNT; ++tile) {
-        sources[tile] = load_mapped_tile(pack, tiles[tile].bundled,
-                                         tiles[tile].minecraft, tiles[tile].quarter_turn);
+        sources[tile] = load_pack_tile(pack, tiles[tile].path);
         if (!sources[tile].data) goto cleanup;
+        if (tiles[tile].quarter_turn > 0) ImageRotateCW(&sources[tile]);
+        if (tiles[tile].quarter_turn < 0) ImageRotateCCW(&sources[tile]);
     }
     atlas = GenImageColor(TILE_COUNT*TILE_SIZE, TILE_SIZE, BLANK);
     if (atlas.data)
@@ -266,262 +207,75 @@ static Color wire_color(int power)
                    (unsigned char)(blue*255), 255};
 }
 
-static bool wire_mask(Image *image)
-{
-    Color *pixels = LoadImageColors(*image);
-    if (!pixels) return false;
-    /* The supplied powered sprites are already red. Recover a neutral
-     * intensity mask so the color curve also supplies green/blue channels. */
-    for (int i = 0; i < image->width*image->height; ++i) {
-        unsigned char value = pixels[i].r;
-        if (pixels[i].g > value) value = pixels[i].g;
-        if (pixels[i].b > value) value = pixels[i].b;
-        pixels[i] = (Color){value, value, value, pixels[i].a};
-    }
-    UnloadImage(*image);
-    *image = (Image){pixels, TILE_SIZE, TILE_SIZE, 1,
-                     PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
-    return true;
-}
-
 static Image create_wire_atlas(const ResourcePack *pack)
 {
-    static const char *const paths[] = {
-        "res/textures/block/redstone_dot0.png",
-        "res/textures/block/redstone_dot1.png",
-        "res/textures/block/redstone_wire0.png", 
-        "res/textures/block/redstone_wire1.png"
-    };
     /* The source arm points down in image space (+Z / south in the world).
      * CW turns map south -> west -> north -> east. */
     static const int clockwise_turns[] = {3, 1, 0, 2};
-    Image sources[4] = {0};
     Image arms[4] = {0};
     Image dot = load_pack_tile(pack, "block/redstone_dust_dot.png");
     Image line = load_pack_tile(pack, "block/redstone_dust_line0.png");
-    Image pack_arm = {0};
-    bool pack_wire = dot.data && line.data;
     Image atlas = {0};
     Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
-    bool complete = false;
+    Rectangle half = {0, TILE_SIZE/2, TILE_SIZE, TILE_SIZE/2};
 
-    if (pack_wire) {
-        Rectangle half = {0, TILE_SIZE/2, TILE_SIZE, TILE_SIZE/2};
-        pack_arm = GenImageColor(TILE_SIZE, TILE_SIZE, BLANK);
-        if (!pack_arm.data) goto cleanup;
-        ImageDraw(&pack_arm, line, half, half, WHITE);
-    } else {
-        for (int index = 0; index < 4; ++index) {
-            sources[index] = load_tile(paths[index]);
-            if (!sources[index].data) goto cleanup;
-            if ((index & 1) && !wire_mask(&sources[index])) goto cleanup;
-        }
+    if (!dot.data || !line.data) goto cleanup;
+    for (int direction = 0; direction < 4; ++direction) {
+        arms[direction] = GenImageColor(TILE_SIZE, TILE_SIZE, BLANK);
+        if (!arms[direction].data) goto cleanup;
+        ImageDraw(&arms[direction], line, half, half, WHITE);
+        for (int turn = 0; turn < clockwise_turns[direction]; ++turn)
+            ImageRotateCW(&arms[direction]);
     }
     atlas = GenImageColor(WIRE_COLUMNS*TILE_SIZE, WIRE_ROWS*TILE_SIZE, BLANK);
     if (!atlas.data) goto cleanup;
 
     for (int power = 0; power < WIRE_STATES; ++power) {
-        int powered = power > 0;
-        /* Minecraft's neutral sprites are tinted at every power level. */
-        Color tint = pack_wire || powered ? wire_color(power) : WHITE;
-        for (int direction = 0; direction < 4; ++direction) {
-            arms[direction] = ImageCopy(pack_wire ? pack_arm : sources[2 + powered]);
-            if (!arms[direction].data) goto cleanup;
-            for (int turn = 0; turn < clockwise_turns[direction]; ++turn)
-                ImageRotateCW(&arms[direction]);
-        }
+        Color tint = wire_color(power);
         for (int mask = 0; mask < WIRE_SHAPES; ++mask) {
             Rectangle destination = wire_tile_rectangle(power*WIRE_SHAPES + mask);
-            for (int direction = 0; direction < 4; ++direction) {
+            for (int direction = 0; direction < 4; ++direction)
                 if (mask & (1 << direction))
                     ImageDraw(&atlas, arms[direction], full, destination, tint);
-            }
             /* Opposite pairs form straight lines without a center dot. */
-            bool straight = (mask == 3 || mask == 12);
-            if (!straight)
-                ImageDraw(&atlas, pack_wire ? dot : sources[powered],
-                          full, destination, tint);
+            if (mask != 3 && mask != 12)
+                ImageDraw(&atlas, dot, full, destination, tint);
         }
-
-        /* Climbing strips use a full line without a dot in the middle. */
         Rectangle side = wire_tile_rectangle(WIRE_SIDE_FIRST + power);
-        if (pack_wire) ImageDraw(&atlas, line, full, side, tint);
-        else {
-            ImageDraw(&atlas, arms[2], full, side, tint);
-            ImageDraw(&atlas, arms[3], full, side, tint);
-        }
-        for (int direction = 0; direction < 4; ++direction) {
-            UnloadImage(arms[direction]);
-            arms[direction] = (Image){0};
-        }
+        ImageDraw(&atlas, line, full, side, tint);
     }
-    complete = true;
 
 cleanup:
     if (dot.data) UnloadImage(dot);
     if (line.data) UnloadImage(line);
-    if (pack_arm.data) UnloadImage(pack_arm);
-    for (int index = 0; index < 4; ++index) {
-        if (sources[index].data) UnloadImage(sources[index]);
-        if (arms[index].data) UnloadImage(arms[index]);
-    }
-    if (!complete) {
-        if (atlas.data) UnloadImage(atlas);
-        return (Image){0};
-    }
-    return atlas;
-}
-
-static Image create_torch_atlas(const ResourcePack *pack)
-{
-    static const char *const paths[] = {
-        "res/textures/block/redstone_torch0.png", 
-        "res/textures/block/redstone_torch1.png"
-    };
-    static const char *const minecraft[] = {
-        "block/redstone_torch_off.png", "block/redstone_torch.png"
-    };
-    Image sources[2] = {0};
-    Image atlas = {0};
-    for (int lit = 0; lit < 2; ++lit) {
-        sources[lit] = load_mapped_tile(pack, paths[lit], minecraft[lit], 0);
-        if (!sources[lit].data) goto cleanup;
-    }
-
-    atlas = GenImageColor(2*TILE_SIZE, TILE_SIZE, BLANK);
-    if (atlas.data) {
-        Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
-        for (int lit = 0; lit < 2; ++lit) {
-            Rectangle destination = {lit*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE};
-            ImageDraw(&atlas, sources[lit], full, destination, WHITE);
-        }
-    }
-
-cleanup:
-    for (int lit = 0; lit < 2; ++lit)
-        if (sources[lit].data) UnloadImage(sources[lit]);
-    return atlas;
-}
-
-static Image create_repeater_atlas(void)
-{
-    static const char *const paths[REPEATER_STATES][REPEATER_DELAYS] = {
-        {
-            "res/textures/block/repeater1_0.png",
-            "res/textures/block/repeater2_0.png",
-            "res/textures/block/repeater3_0.png",
-            "res/textures/block/repeater4_0.png"
-        },
-        {
-            "res/textures/block/repeater1_1.png",
-            "res/textures/block/repeater2_1.png",
-            "res/textures/block/repeater3_1.png",
-            "res/textures/block/repeater4_1.png"
-        }
-    };
-    Image sources[REPEATER_STATES][REPEATER_DELAYS] = {0};
-    Image atlas = {0};
-    Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
-
-    for (int powered = 0; powered < REPEATER_STATES; ++powered)
-        for (int delay = 0; delay < REPEATER_DELAYS; ++delay) {
-            sources[powered][delay] = load_tile(paths[powered][delay]);
-            if (!sources[powered][delay].data) goto cleanup;
-        }
-
-    atlas = GenImageColor(REPEATER_COLUMNS*TILE_SIZE,
-                          REPEATER_ROWS*TILE_SIZE, BLANK);
-    if (atlas.data)
-        for (int powered = 0; powered < REPEATER_STATES; ++powered)
-            for (int delay = 0; delay < REPEATER_DELAYS; ++delay) {
-                Rectangle destination = {
-                    delay*TILE_SIZE, powered*TILE_SIZE,
-                    TILE_SIZE, TILE_SIZE
-                };
-                ImageDraw(&atlas, sources[powered][delay], full,
-                          destination, WHITE);
-            }
-
-cleanup:
-    for (int powered = 0; powered < REPEATER_STATES; ++powered)
-        for (int delay = 0; delay < REPEATER_DELAYS; ++delay)
-            if (sources[powered][delay].data)
-                UnloadImage(sources[powered][delay]);
-    return atlas;
-}
-
-static Image create_comparator_atlas(void)
-{
-    static const char *const paths[COMPARATOR_STATES][COMPARATOR_MODES] = {
-        {
-            "res/textures/block/comparator1_0.png",
-            "res/textures/block/comparator2_0.png"
-        },
-        {
-            "res/textures/block/comparator1_1.png",
-            "res/textures/block/comparator2_1.png"
-        }
-    };
-    Image sources[COMPARATOR_STATES][COMPARATOR_MODES] = {0};
-    Image atlas = {0};
-    Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
-
-    for (int powered = 0; powered < COMPARATOR_STATES; ++powered)
-        for (int mode = 0; mode < COMPARATOR_MODES; ++mode) {
-            sources[powered][mode] = load_tile(paths[powered][mode]);
-            if (!sources[powered][mode].data) goto cleanup;
-        }
-
-    atlas = GenImageColor(COMPARATOR_COLUMNS*TILE_SIZE,
-                          COMPARATOR_ROWS*TILE_SIZE, BLANK);
-    if (atlas.data)
-        for (int powered = 0; powered < COMPARATOR_STATES; ++powered)
-            for (int mode = 0; mode < COMPARATOR_MODES; ++mode) {
-                Rectangle destination = {
-                    mode*TILE_SIZE, powered*TILE_SIZE,
-                    TILE_SIZE, TILE_SIZE
-                };
-                ImageDraw(&atlas, sources[powered][mode], full,
-                          destination, WHITE);
-            }
-
-cleanup:
-    for (int powered = 0; powered < COMPARATOR_STATES; ++powered)
-        for (int mode = 0; mode < COMPARATOR_MODES; ++mode)
-            if (sources[powered][mode].data)
-                UnloadImage(sources[powered][mode]);
+    for (int direction = 0; direction < 4; ++direction)
+        if (arms[direction].data) UnloadImage(arms[direction]);
     return atlas;
 }
 
 static Image create_two_state_atlas(const ResourcePack *pack,
-                                    const char *unpowered_path, const char *powered_path,
-                                    const char *minecraft_off, const char *minecraft_on)
+                                    const char *off_path, const char *on_path)
 {
-    const char *const paths[RAIL_STATES] = {
-        unpowered_path, powered_path
-    };
-    const char *const minecraft[RAIL_STATES] = {minecraft_off, minecraft_on};
-    Image sources[RAIL_STATES] = {0};
+    const char *const paths[ATLAS_STATES] = {off_path, on_path};
+    Image sources[ATLAS_STATES] = {0};
     Image atlas = {0};
-    for (int powered = 0; powered < RAIL_STATES; ++powered) {
-        sources[powered] = load_mapped_tile(pack, paths[powered], minecraft[powered], 0);
-        if (!sources[powered].data) goto cleanup;
+    for (int state = 0; state < ATLAS_STATES; ++state) {
+        sources[state] = load_pack_tile(pack, paths[state]);
+        if (!sources[state].data) goto cleanup;
     }
 
-    atlas = GenImageColor(RAIL_STATES*TILE_SIZE, TILE_SIZE, BLANK);
+    atlas = GenImageColor(ATLAS_STATES*TILE_SIZE, TILE_SIZE, BLANK);
     if (atlas.data) {
         Rectangle full = {0, 0, TILE_SIZE, TILE_SIZE};
-        for (int powered = 0; powered < RAIL_STATES; ++powered) {
-            Rectangle destination = {
-                powered*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE
-            };
-            ImageDraw(&atlas, sources[powered], full, destination, WHITE);
+        for (int state = 0; state < ATLAS_STATES; ++state) {
+            Rectangle destination = {state*TILE_SIZE, 0, TILE_SIZE, TILE_SIZE};
+            ImageDraw(&atlas, sources[state], full, destination, WHITE);
         }
     }
 
 cleanup:
-    for (int powered = 0; powered < RAIL_STATES; ++powered)
-        if (sources[powered].data) UnloadImage(sources[powered]);
+    for (int state = 0; state < ATLAS_STATES; ++state)
+        if (sources[state].data) UnloadImage(sources[state]);
     return atlas;
 }
 
@@ -544,8 +298,7 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     SetTextureFilter(renderer->atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->atlas, TEXTURE_WRAP_CLAMP);
 
-    Image iron = load_mapped_tile(pack, "res/textures/block/white_concrete.png",
-                                  "block/white_concrete.png", 0);
+    Image iron = load_pack_tile(pack, "block/white_concrete.png");
     if (iron.data) {
         renderer->iron_texture = LoadTextureFromImage(iron);
         UnloadImage(iron);
@@ -571,8 +324,7 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
                                 (int)(maximum < 8.0f ? maximum : 8.0f));
     }
 
-    Image glass = load_mapped_tile(pack, "res/textures/block/glass.png",
-                                   "block/glass.png", 0);
+    Image glass = load_pack_tile(pack, "block/glass.png");
     if (glass.data) {
         renderer->glass_texture = LoadTextureFromImage(glass);
         UnloadImage(glass);
@@ -598,7 +350,8 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     SetTextureFilter(renderer->wire_atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->wire_atlas, TEXTURE_WRAP_CLAMP);
 
-    Image torch_atlas = create_torch_atlas(pack);
+    Image torch_atlas = create_two_state_atlas(
+        pack, "block/redstone_torch_off.png", "block/redstone_torch.png");
     if (torch_atlas.data) {
         renderer->torch_atlas = LoadTextureFromImage(torch_atlas);
         UnloadImage(torch_atlas);
@@ -611,37 +364,8 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     SetTextureFilter(renderer->torch_atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->torch_atlas, TEXTURE_WRAP_CLAMP);
 
-    /* These atlases already combine the gate plate and its torches. */
-    Image repeater_atlas = create_repeater_atlas();
-    if (repeater_atlas.data) {
-        renderer->repeater_atlas = LoadTextureFromImage(repeater_atlas);
-        UnloadImage(repeater_atlas);
-    }
-    if (!renderer->repeater_atlas.id) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot create the repeater atlas");
-        block_renderer_unload(renderer);
-        return false;
-    }
-    SetTextureFilter(renderer->repeater_atlas, TEXTURE_FILTER_POINT);
-    SetTextureWrap(renderer->repeater_atlas, TEXTURE_WRAP_CLAMP);
-
-    Image comparator_atlas = create_comparator_atlas();
-    if (comparator_atlas.data) {
-        renderer->comparator_atlas = LoadTextureFromImage(comparator_atlas);
-        UnloadImage(comparator_atlas);
-    }
-    if (!renderer->comparator_atlas.id) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot create the comparator atlas");
-        block_renderer_unload(renderer);
-        return false;
-    }
-    SetTextureFilter(renderer->comparator_atlas, TEXTURE_FILTER_POINT);
-    SetTextureWrap(renderer->comparator_atlas, TEXTURE_WRAP_CLAMP);
-
     Image powered_rail_atlas = create_two_state_atlas(
         pack,
-        "res/textures/block/powered_rail0.png",
-        "res/textures/block/powered_rail1.png",
         "block/powered_rail.png", "block/powered_rail_on.png");
     if (powered_rail_atlas.data) {
         renderer->powered_rail_atlas = LoadTextureFromImage(powered_rail_atlas);
@@ -657,8 +381,6 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
 
     Image activator_rail_atlas = create_two_state_atlas(
         pack,
-        "res/textures/block/activator_rail0.png",
-        "res/textures/block/activator_rail1.png",
         "block/activator_rail.png", "block/activator_rail_on.png");
     if (activator_rail_atlas.data) {
         renderer->activator_rail_atlas = LoadTextureFromImage(activator_rail_atlas);
@@ -671,23 +393,6 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     }
     SetTextureFilter(renderer->activator_rail_atlas, TEXTURE_FILTER_POINT);
     SetTextureWrap(renderer->activator_rail_atlas, TEXTURE_WRAP_CLAMP);
-
-    Image lever_atlas = create_two_state_atlas(
-        NULL,
-        "res/textures/block/lever0.png",
-        "res/textures/block/lever1.png",
-        NULL, NULL);
-    if (lever_atlas.data) {
-        renderer->lever_atlas = LoadTextureFromImage(lever_atlas);
-        UnloadImage(lever_atlas);
-    }
-    if (!renderer->lever_atlas.id) {
-        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot create the lever atlas");
-        block_renderer_unload(renderer);
-        return false;
-    }
-    SetTextureFilter(renderer->lever_atlas, TEXTURE_FILTER_POINT);
-    SetTextureWrap(renderer->lever_atlas, TEXTURE_WRAP_CLAMP);
 
     renderer->cutout_shader = LoadShaderFromMemory(NULL, cutout_fragment_shader);
     if (renderer->cutout_shader.id == rlGetShaderIdDefault()) {
@@ -702,17 +407,17 @@ bool block_renderer_init(BlockRenderer *renderer, const ResourcePack *pack)
     }
     Image minecraft_atlas;
     renderer->minecraft = minecraft_redstone_load(pack, &minecraft_atlas);
-    if (renderer->minecraft) {
+    if (minecraft_atlas.data) {
         renderer->minecraft_atlas = LoadTextureFromImage(minecraft_atlas);
         UnloadImage(minecraft_atlas);
-        if (renderer->minecraft_atlas.id) {
-            SetTextureFilter(renderer->minecraft_atlas, TEXTURE_FILTER_POINT);
-            SetTextureWrap(renderer->minecraft_atlas, TEXTURE_WRAP_CLAMP);
-        } else {
-            minecraft_redstone_free(renderer->minecraft);
-            renderer->minecraft = NULL;
-        }
     }
+    if (!renderer->minecraft_atlas.id) {
+        TraceLog(LOG_ERROR, "BLOCK TEXTURE: Cannot create the redstone model atlas");
+        block_renderer_unload(renderer);
+        return false;
+    }
+    SetTextureFilter(renderer->minecraft_atlas, TEXTURE_FILTER_POINT);
+    SetTextureWrap(renderer->minecraft_atlas, TEXTURE_WRAP_CLAMP);
     return true;
 }
 
@@ -722,13 +427,10 @@ void block_renderer_unload(BlockRenderer *renderer)
     minecraft_redstone_free(renderer->minecraft);
     if (renderer->minecraft_atlas.id) UnloadTexture(renderer->minecraft_atlas);
     if (renderer->cutout_shader.id) UnloadShader(renderer->cutout_shader);
-    if (renderer->lever_atlas.id) UnloadTexture(renderer->lever_atlas);
     if (renderer->activator_rail_atlas.id)
         UnloadTexture(renderer->activator_rail_atlas);
     if (renderer->powered_rail_atlas.id)
         UnloadTexture(renderer->powered_rail_atlas);
-    if (renderer->comparator_atlas.id) UnloadTexture(renderer->comparator_atlas);
-    if (renderer->repeater_atlas.id) UnloadTexture(renderer->repeater_atlas);
     if (renderer->torch_atlas.id) UnloadTexture(renderer->torch_atlas);
     if (renderer->wire_atlas.id) UnloadTexture(renderer->wire_atlas);
     if (renderer->glass_texture.id) UnloadTexture(renderer->glass_texture);
@@ -774,24 +476,15 @@ static int direction_turns(Direction right, Direction down,
     return 0;
 }
 
-static void solid_tile_region_uv(Texture2D atlas, int tile,
-                                 float x, float y, float width, float height,
-                                 int turns, Vector2 uv[4])
+static void solid_tile_uv(Texture2D atlas, int tile, int turns, Vector2 uv[4])
 {
-    float u0 = (tile*TILE_SIZE + x + 0.5f)/atlas.width;
-    float u1 = (tile*TILE_SIZE + x + width - 0.5f)/atlas.width;
-    float v0 = (y + 0.5f)/atlas.height;
-    float v1 = (y + height - 0.5f)/atlas.height;
+    float u0 = (tile*TILE_SIZE + 0.5f)/atlas.width;
+    float u1 = ((tile + 1)*TILE_SIZE - 0.5f)/atlas.width;
+    float v0 = 0.5f/atlas.height;
+    float v1 = (TILE_SIZE - 0.5f)/atlas.height;
     const Vector2 base[4] = {{u0,v1},{u1,v1},{u1,v0},{u0,v0}};
     for (int vertex = 0; vertex < 4; ++vertex)
         uv[vertex] = base[(vertex + turns) & 3];
-}
-
-static void solid_tile_uv(Texture2D atlas, int tile, int turns,
-                          Vector2 uv[4])
-{
-    solid_tile_region_uv(atlas, tile, 0.0f, 0.0f,
-                         TILE_SIZE, TILE_SIZE, turns, uv);
 }
 
 static void observer_face_uv(Texture2D atlas, BlockState state, int face,
@@ -863,8 +556,7 @@ static void barrel_face_uv(Texture2D atlas, BlockState state, int face,
         desired = facing == DIR_UP ? DIR_NORTH :
                   facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
     } else if (face_direction == direction_opposite(facing)) {
-        /* This project intentionally reuses the closed lid as the bottom. */
-        texture = BARREL_TOP;
+        texture = BARREL_BOTTOM;
         desired = facing == DIR_UP ? DIR_NORTH :
                   facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
     } else {
@@ -886,136 +578,14 @@ static void dropper_face_uv(Texture2D atlas, BlockState state, int face,
     static const Direction directions[6] = {
         DIR_SOUTH, DIR_NORTH, DIR_EAST, DIR_WEST, DIR_UP, DIR_DOWN
     };
-    static const Direction right[6] = {
-        DIR_EAST, DIR_WEST, DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_EAST
-    };
-    static const Direction down[6] = {
-        DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_SOUTH, DIR_NORTH
-    };
     Direction facing = (Direction)state.data.dropper.facing;
+    bool vertical = facing == DIR_UP || facing == DIR_DOWN;
     bool front = directions[face] == facing;
-    bool back = directions[face] == direction_opposite(facing);
-    int tile = front ? DROPPER_FRONT_TILE :
-               back ? DROPPER_BACK0_TILE + state.data.dropper.triggered :
-                      DROPPER_SIDE0_TILE + state.data.dropper.triggered;
-    Direction desired = front || back ?
-        (facing == DIR_UP ? DIR_NORTH : facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN) :
-        facing;
-    solid_tile_uv(atlas, tile,
-                  direction_turns(right[face], down[face], desired, front || back),
-                  uv);
-}
-
-static int piston_tile_first(BlockId id)
-{
-    return id == BLOCK_STICKY_PISTON ||
-           id == BLOCK_STICKY_PISTON_HEAD ?
-           STICKY_PISTON_TILE_FIRST : PISTON_TILE_FIRST;
-}
-
-static void piston_face_uv(Texture2D atlas, BlockState state, int face,
-                           Vector2 uv[4])
-{
-    static const Direction directions[6] = {
-        DIR_SOUTH, DIR_NORTH, DIR_EAST, DIR_WEST, DIR_UP, DIR_DOWN
-    };
-    static const Direction right[6] = {
-        DIR_EAST, DIR_WEST, DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_EAST
-    };
-    static const Direction down[6] = {
-        DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_SOUTH, DIR_NORTH
-    };
-    Direction facing = (Direction)state.data.piston.facing;
-    Direction face_direction = directions[face];
-    bool powered = state.data.piston.powered;
-    int texture;
-    Direction desired;
-    bool points_down;
-    float region_x = 0.0f, region_width = TILE_SIZE;
-
-    if (face_direction == facing) {
-        texture = state.data.piston.extended ?
-                  (powered ? PISTON_BOTTOM1 : PISTON_BOTTOM0) : PISTON_TOP;
-        desired = facing == DIR_UP ? DIR_NORTH :
-                  facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
-        points_down = true;
-    } else if (face_direction == direction_opposite(facing)) {
-        texture = powered ? PISTON_BOTTOM1 : PISTON_BOTTOM0;
-        desired = facing == DIR_UP ? DIR_NORTH :
-                  facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
-        points_down = true;
-    } else {
-        texture = powered ? PISTON_SIDE1 : PISTON_SIDE0;
-        desired = facing;
-        points_down = false;
-        /* The rightmost eight source pixels are the wooden head. Once the
-         * piston extends, only the 12/16-deep stone body remains here. */
-        if (state.data.piston.extended) region_width = 24.0f;
-    }
-
-    int tile = piston_tile_first((BlockId)state.id) + texture;
-    int turns = direction_turns(right[face], down[face], desired,
-                                points_down);
-    solid_tile_region_uv(atlas, tile, region_x, 0.0f, region_width,
-                         TILE_SIZE, turns, uv);
-}
-
-static int piston_head_uv(Texture2D atlas, BlockState state,
-                          unsigned solid_faces,
-                          Vector2 uv[BLOCK_GEOMETRY_QUADS][4])
-{
-    static const Direction directions[6] = {
-        DIR_SOUTH, DIR_NORTH, DIR_EAST, DIR_WEST, DIR_UP, DIR_DOWN
-    };
-    static const Direction right[6] = {
-        DIR_EAST, DIR_WEST, DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_EAST
-    };
-    static const Direction down[6] = {
-        DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_DOWN, DIR_SOUTH, DIR_NORTH
-    };
-    Direction facing = (Direction)state.data.piston.facing;
-    int first = piston_tile_first((BlockId)state.id);
-    int side = first +
-               (state.data.piston.powered ? PISTON_SIDE1 : PISTON_SIDE0);
-    int top = first + PISTON_TOP;
-    int count = 0;
-
-    for (int face = 0; face < 6; ++face) {
-        if (!(solid_faces & (1u << face))) continue;
-        Direction face_direction = directions[face];
-        if (face_direction == facing) {
-            Direction upright = facing == DIR_UP ? DIR_NORTH :
-                                facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
-            solid_tile_uv(atlas, top,
-                          direction_turns(right[face], down[face], upright,
-                                          true), uv[count]);
-        } else if (face_direction == direction_opposite(facing)) {
-            /* Vanilla's moving plate is wooden on both broad faces. */
-            Direction upright = facing == DIR_UP ? DIR_NORTH :
-                                facing == DIR_DOWN ? DIR_SOUTH : DIR_DOWN;
-            solid_tile_uv(atlas, top,
-                          direction_turns(right[face], down[face], upright,
-                                          true), uv[count]);
-        } else {
-            int turns = direction_turns(right[face], down[face], facing,
-                                        false);
-            solid_tile_region_uv(atlas, side, 24.0f, 0.0f, 8.0f,
-                                 TILE_SIZE, turns, uv[count]);
-        }
-        ++count;
-    }
-
-    for (int face = 0; face < 6; ++face) {
-        Direction face_direction = directions[face];
-        if (face_direction == facing ||
-            face_direction == direction_opposite(facing)) continue;
-        /* Use a bolt-free strip of the wooden top texture for the narrow
-         * piston arm, with its long texture axis following the arm. */
-        int turns = direction_turns(right[face], down[face], facing, false);
-        solid_tile_region_uv(atlas, top, 5.0f, 4.0f, 6.0f, 24.0f,
-                             turns, uv[count++]);
-    }
-    return count;
+    int tile;
+    if (front) tile = vertical ? DROPPER_VERTICAL_FRONT_TILE : DROPPER_FRONT_TILE;
+    else if (vertical || face >= 4) tile = DROPPER_TOP_TILE;
+    else tile = DROPPER_SIDE_TILE;
+    solid_tile_uv(atlas, tile, 0, uv);
 }
 
 static TorchTransform torch_transform(Vector3 center, Direction support)
@@ -1069,65 +639,6 @@ static void torch_uv(Texture2D atlas, int lit, Rectangle source, Vector2 uv[4])
     uv[3] = (Vector2){u0, v0};
 }
 
-static void redstone_gate_top_uv(Texture2D atlas, int column, int row,
-                                 Direction facing, Vector2 uv[4])
-{
-    float u0 = (column*TILE_SIZE + 0.5f)/atlas.width;
-    float u1 = ((column + 1)*TILE_SIZE - 0.5f)/atlas.width;
-    float v0 = (row*TILE_SIZE + 0.5f)/atlas.height;
-    float v1 = ((row + 1)*TILE_SIZE - 0.5f)/atlas.height;
-    const Vector2 base[4] = {{u0,v1},{u1,v1},{u1,v0},{u0,v0}};
-
-    /* The top edge of every gate source image is its output/front. */
-    int turn = 0;
-    switch (facing) {
-    case DIR_EAST:  turn = 1; break;
-    case DIR_SOUTH: turn = 2; break;
-    case DIR_WEST:  turn = 3; break;
-    default: break; /* north */
-    }
-    for (int vertex = 0; vertex < 4; ++vertex)
-        uv[vertex] = base[(vertex + turn) & 3];
-}
-
-static void redstone_gate_side_uv(Texture2D atlas, int column, int row,
-                                  Vector2 uv[4])
-{
-    float u0 = (column*TILE_SIZE + 0.5f)/atlas.width;
-    float u1 = ((column + 1)*TILE_SIZE - 0.5f)/atlas.width;
-    float v = (row*TILE_SIZE + 0.5f)/atlas.height;
-
-    /* Stretch the uniform outermost pixel row into the two-pixel-high base. */
-    uv[0] = (Vector2){u0, v};
-    uv[1] = (Vector2){u1, v};
-    uv[2] = (Vector2){u1, v};
-    uv[3] = (Vector2){u0, v};
-}
-
-static void repeater_uv(Texture2D atlas, BlockState state,
-                        Vector2 uv[REDSTONE_GATE_GEOMETRY_QUADS][4])
-{
-    int delay = state.data.repeater.delay;
-    if (delay < 1 || delay > REPEATER_DELAYS) delay = 1;
-    int column = delay - 1;
-    int row = state.data.repeater.powered ? 1 : 0;
-    redstone_gate_top_uv(atlas, column, row,
-                         (Direction)state.data.repeater.facing, uv[0]);
-    for (int face = 1; face < REDSTONE_GATE_GEOMETRY_QUADS; ++face)
-        redstone_gate_side_uv(atlas, column, row, uv[face]);
-}
-
-static void comparator_uv(Texture2D atlas, BlockState state,
-                          Vector2 uv[REDSTONE_GATE_GEOMETRY_QUADS][4])
-{
-    int column = state.data.comparator.subtract ? 1 : 0;
-    int row = state.data.comparator.powered ? 1 : 0;
-    redstone_gate_top_uv(atlas, column, row,
-                         (Direction)state.data.comparator.facing, uv[0]);
-    for (int face = 1; face < REDSTONE_GATE_GEOMETRY_QUADS; ++face)
-        redstone_gate_side_uv(atlas, column, row, uv[face]);
-}
-
 static Texture2D rail_texture(const BlockRenderer *renderer, BlockId id)
 {
     return id == BLOCK_POWERED_RAIL ? renderer->powered_rail_atlas :
@@ -1136,9 +647,9 @@ static Texture2D rail_texture(const BlockRenderer *renderer, BlockId id)
 
 static void rail_uv(Texture2D atlas, BlockState state, Vector2 uv[4])
 {
-    int column = state.data.rail.powered ? 1 : 0;
-    redstone_gate_top_uv(atlas, column, 0,
-                         (Direction)state.data.rail.facing, uv);
+    Direction facing = (Direction)state.data.rail.facing;
+    int turns = direction_turns(DIR_EAST, DIR_SOUTH, direction_opposite(facing), true);
+    solid_tile_uv(atlas, state.data.rail.powered ? 1 : 0, turns, uv);
 }
 
 static bool rail_vertex_high(Direction facing, Vector3 point)
@@ -1167,30 +678,6 @@ static void rail_geometry(BlockState state, Vector3 center,
     }
 }
 
-static void redstone_gate_geometry(
-    Vector3 center,
-    Vector3 vertices[REDSTONE_GATE_GEOMETRY_QUADS][4])
-{
-    float bottom = center.y - 0.5f;
-    float top = bottom + redstone_gate_height;
-
-    for (int vertex = 0; vertex < 4; ++vertex) {
-        Vector3 point = cube_faces[4].vertices[vertex];
-        vertices[0][vertex] = (Vector3){
-            center.x + point.x, top, center.z + point.z
-        };
-    }
-    for (int face = 0; face < 4; ++face)
-        for (int vertex = 0; vertex < 4; ++vertex) {
-            Vector3 point = cube_faces[face].vertices[vertex];
-            vertices[face + 1][vertex] = (Vector3){
-                center.x + point.x,
-                point.y < 0.0f ? bottom : top,
-                center.z + point.z
-            };
-        }
-}
-
 static int hopper_geometry(const BlockRenderer *renderer, BlockState state,
                             Vector3 center, BlockGeometry *geometry);
 
@@ -1209,7 +696,7 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         state.id == BLOCK_IRON || state.id == BLOCK_REDSTONE_BLOCK ||
         state.id == BLOCK_GLASS || state.id == BLOCK_SLIME ||
         state.id == BLOCK_NOTE_BLOCK || state.id == BLOCK_HONEY ||
-        state.id == BLOCK_TARGET || state.id == BLOCK_REDSTONE_LAMP) {
+        state.id == BLOCK_REDSTONE_LAMP) {
         Texture2D texture = cube_texture(renderer, (BlockId)state.id);
         int tile = (state.id >= BLOCK_BLUE_CONCRETE &&
                     state.id <= BLOCK_YELLOW_CONCRETE) ?
@@ -1217,7 +704,6 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
                    state.id == BLOCK_SLIME ? SLIME_TILE :
                    state.id == BLOCK_NOTE_BLOCK ? NOTE_BLOCK_TILE :
                    state.id == BLOCK_HONEY ? HONEY_TILE :
-                   state.id == BLOCK_TARGET ? TARGET_TILE :
                    state.id == BLOCK_REDSTONE_LAMP ?
                        (state.data.lamp.lit ? LAMP_ON_TILE : LAMP_OFF_TILE) : 0;
         float u0 = (tile*TILE_SIZE + 0.5f)/texture.width;
@@ -1228,6 +714,11 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         for (int face = 0; face < 6; ++face)
             if (solid_faces & (1u << face))
                 memcpy(uv[count++], face_uv, sizeof(face_uv));
+    } else if (state.id == BLOCK_TARGET) {
+        for (int face = 0; face < 6; ++face)
+            if (solid_faces & (1u << face))
+                solid_tile_uv(renderer->atlas, face < 4 ? TARGET_SIDE_TILE : TARGET_TOP_TILE,
+                              0, uv[count++]);
     } else if (state.id == BLOCK_OBSERVER) {
         for (int face = 0; face < 6; ++face)
             if (solid_faces & (1u << face))
@@ -1240,12 +731,6 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         for (int face = 0; face < 6; ++face)
             if (solid_faces & (1u << face))
                 barrel_face_uv(renderer->atlas, state, face, uv[count++]);
-    } else if (block_is_piston_base((BlockId)state.id)) {
-        for (int face = 0; face < 6; ++face)
-            if (solid_faces & (1u << face))
-                piston_face_uv(renderer->atlas, state, face, uv[count++]);
-    } else if (block_is_piston_head((BlockId)state.id)) {
-        count = piston_head_uv(renderer->atlas, state, solid_faces, uv);
     } else if (state.id == BLOCK_REDSTONE_WIRE) {
         int mask = 0;
         for (int direction = 0; direction < 4; ++direction)
@@ -1262,19 +747,10 @@ int block_renderer_build_uv(const BlockRenderer *renderer, BlockState state,
         int lit = state.data.torch.lit ? 1 : 0;
         for (int face = 0; face < 6; ++face) {
             Rectangle source = {0,0,TILE_SIZE,TILE_SIZE};
-            if (face == 4) source = (Rectangle){14,7,4,4};
-            if (face == 5) source = (Rectangle){14,28,4,4};
+            if (face == 4) source = (Rectangle){14,12,4,4};
+            if (face == 5) source = (Rectangle){14,26,4,4};
             torch_uv(renderer->torch_atlas, lit, source, uv[count++]);
         }
-    } else if (state.id == BLOCK_LEVER) {
-        solid_tile_uv(renderer->lever_atlas,
-                      state.data.lever.powered ? 1 : 0, 0, uv[count++]);
-    } else if (state.id == BLOCK_REDSTONE_REPEATER) {
-        repeater_uv(renderer->repeater_atlas, state, uv);
-        count = REDSTONE_GATE_GEOMETRY_QUADS;
-    } else if (state.id == BLOCK_REDSTONE_COMPARATOR) {
-        comparator_uv(renderer->comparator_atlas, state, uv);
-        count = REDSTONE_GATE_GEOMETRY_QUADS;
     } else if (state.id == BLOCK_POWERED_RAIL ||
                state.id == BLOCK_ACTIVATOR_RAIL) {
         rail_uv(rail_texture(renderer, (BlockId)state.id), state, uv[0]);
@@ -1328,103 +804,6 @@ static int hopper_geometry(const BlockRenderer *renderer, BlockState state,
     return count;
 }
 
-static void piston_base_bounds(BlockState state, Vector3 *minimum,
-                               Vector3 *maximum)
-{
-    *minimum = (Vector3){-0.5f, -0.5f, -0.5f};
-    *maximum = (Vector3){ 0.5f,  0.5f,  0.5f};
-    if (!state.data.piston.extended) return;
-    switch ((Direction)state.data.piston.facing) {
-    case DIR_EAST:  maximum->x =  0.25f; break;
-    case DIR_WEST:  minimum->x = -0.25f; break;
-    case DIR_UP:    maximum->y =  0.25f; break;
-    case DIR_DOWN:  minimum->y = -0.25f; break;
-    case DIR_SOUTH: maximum->z =  0.25f; break;
-    case DIR_NORTH: minimum->z = -0.25f; break;
-    default: break;
-    }
-}
-
-static Vector3 direction_vector(Direction direction)
-{
-    BlockPos offset = block_offset((BlockPos){0}, direction);
-    return (Vector3){(float)offset.x, (float)offset.y, (float)offset.z};
-}
-
-static void lever_geometry(BlockState state, Vector3 center,
-                           Vector3 vertices[4])
-{
-    Direction support = (Direction)state.data.lever.support_dir;
-    Direction facing = (Direction)state.data.lever.facing;
-    if ((unsigned)support >= DIR_COUNT) support = DIR_DOWN;
-    if (!direction_horizontal(facing)) facing = DIR_NORTH;
-    Vector3 toward_support = direction_vector(support);
-    Vector3 outward = {-toward_support.x, -toward_support.y,
-                       -toward_support.z};
-    Vector3 up = direction_horizontal(support) ?
-                 (Vector3){0, 1, 0} : direction_vector(facing);
-    Vector3 right = {
-        up.y*outward.z - up.z*outward.y,
-        up.z*outward.x - up.x*outward.z,
-        up.x*outward.y - up.y*outward.x
-    };
-    Vector3 plane = {
-        center.x + toward_support.x*(0.5f - lever_offset),
-        center.y + toward_support.y*(0.5f - lever_offset),
-        center.z + toward_support.z*(0.5f - lever_offset)
-    };
-    static const float horizontal[] = {-0.5f, 0.5f, 0.5f, -0.5f};
-    static const float vertical[] = {-0.5f, -0.5f, 0.5f, 0.5f};
-    for (int vertex = 0; vertex < 4; ++vertex) {
-        vertices[vertex] = (Vector3){
-            plane.x + right.x*horizontal[vertex] + up.x*vertical[vertex],
-            plane.y + right.y*horizontal[vertex] + up.y*vertical[vertex],
-            plane.z + right.z*horizontal[vertex] + up.z*vertical[vertex]
-        };
-    }
-}
-
-static void piston_head_bounds(Direction facing,
-                               Vector3 *plate_minimum,
-                               Vector3 *plate_maximum,
-                               Vector3 *rod_minimum,
-                               Vector3 *rod_maximum)
-{
-    *plate_minimum = (Vector3){-0.5f, -0.5f, -0.5f};
-    *plate_maximum = (Vector3){ 0.5f,  0.5f,  0.5f};
-    /* A slim 3/16-wide wooden arm. It reaches 4/16 into the shortened base,
-     * so the head never appears detached from the piston body. */
-    *rod_minimum = (Vector3){-0.09375f, -0.09375f, -0.09375f};
-    *rod_maximum = (Vector3){ 0.09375f,  0.09375f,  0.09375f};
-    switch (facing) {
-    case DIR_EAST:
-        plate_minimum->x = 0.25f;
-        rod_minimum->x = -0.75f; rod_maximum->x = 0.25f;
-        break;
-    case DIR_WEST:
-        plate_maximum->x = -0.25f;
-        rod_minimum->x = -0.25f; rod_maximum->x = 0.75f;
-        break;
-    case DIR_UP:
-        plate_minimum->y = 0.25f;
-        rod_minimum->y = -0.75f; rod_maximum->y = 0.25f;
-        break;
-    case DIR_DOWN:
-        plate_maximum->y = -0.25f;
-        rod_minimum->y = -0.25f; rod_maximum->y = 0.75f;
-        break;
-    case DIR_SOUTH:
-        plate_minimum->z = 0.25f;
-        rod_minimum->z = -0.75f; rod_maximum->z = 0.25f;
-        break;
-    case DIR_NORTH:
-        plate_maximum->z = -0.25f;
-        rod_minimum->z = -0.25f; rod_maximum->z = 0.75f;
-        break;
-    default: break;
-    }
-}
-
 void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState state,
                                    Vector3 center, unsigned solid_faces,
                                    BlockGeometry *geometry)
@@ -1462,34 +841,6 @@ void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState sta
             }
             ++count;
         }
-    } else if (block_is_piston_base((BlockId)state.id)) {
-        Vector3 minimum, maximum;
-        piston_base_bounds(state, &minimum, &maximum);
-        for (int face = 0; face < 6; ++face) {
-            if (!(solid_faces & (1u << face))) continue;
-            box_face_vertices(center, minimum, maximum, face,
-                              geometry->vertices[count++]);
-        }
-    } else if (block_is_piston_head((BlockId)state.id)) {
-        static const Direction directions[6] = {
-            DIR_SOUTH, DIR_NORTH, DIR_EAST, DIR_WEST, DIR_UP, DIR_DOWN
-        };
-        Direction facing = (Direction)state.data.piston.facing;
-        Vector3 plate_minimum, plate_maximum, rod_minimum, rod_maximum;
-        piston_head_bounds(facing, &plate_minimum, &plate_maximum,
-                           &rod_minimum, &rod_maximum);
-        for (int face = 0; face < 6; ++face) {
-            if (!(solid_faces & (1u << face))) continue;
-            box_face_vertices(center, plate_minimum, plate_maximum, face,
-                              geometry->vertices[count++]);
-        }
-        for (int face = 0; face < 6; ++face) {
-            Direction face_direction = directions[face];
-            if (face_direction == facing ||
-                face_direction == direction_opposite(facing)) continue;
-            box_face_vertices(center, rod_minimum, rod_maximum, face,
-                              geometry->vertices[count++]);
-        }
     } else if (state.id == BLOCK_REDSTONE_WIRE) {
         for (int vertex = 0; vertex < 4; ++vertex) {
             Vector3 p = cube_faces[4].vertices[vertex];
@@ -1521,12 +872,6 @@ void block_renderer_build_geometry(const BlockRenderer *renderer, BlockState sta
                 Vector3 p = torch_rotate(transform, torch_faces[face].vertices[vertex]);
                 geometry->vertices[face][vertex] = (Vector3){transform.origin.x+p.x,transform.origin.y+p.y,transform.origin.z+p.z};
             }
-    } else if (state.id == BLOCK_LEVER) {
-        lever_geometry(state, center, geometry->vertices[0]);
-    } else if (state.id == BLOCK_REDSTONE_REPEATER) {
-        redstone_gate_geometry(center, geometry->vertices);
-    } else if (state.id == BLOCK_REDSTONE_COMPARATOR) {
-        redstone_gate_geometry(center, geometry->vertices);
     } else if (state.id == BLOCK_POWERED_RAIL ||
                state.id == BLOCK_ACTIVATOR_RAIL) {
         rail_geometry(state, center, geometry->vertices[0]);
