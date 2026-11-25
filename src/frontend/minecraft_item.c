@@ -56,7 +56,7 @@ static void paint_face(Image icon, Image texture, const IconFace *face)
     Vector2 right = Vector2Subtract(face->points[1], face->points[0]);
     Vector2 down = Vector2Subtract(face->points[3], face->points[0]);
     float det = right.x*down.y - right.y*down.x;
-    if (fabsf(det) < 0.0001f) return;
+	if (det >= 0 || fabsf(det) < 0.0001f) return;
     Vector2 uv_right = Vector2Subtract(face->uv[1], face->uv[0]);
     Vector2 uv_down = Vector2Subtract(face->uv[3], face->uv[0]);
     Color *pixels = icon.data;
