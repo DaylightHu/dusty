@@ -14,7 +14,7 @@
 enum { REGION_SIZE = 16 };
 enum {
     SOLIDS, IRON, GLASS, DUST, REPEATERS, COMPARATORS,
-    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, PISTONS, PARTS
+    POWERED_RAILS, ACTIVATOR_RAILS, TORCHES, LEVERS, PISTONS, OBSERVERS, PARTS
 };
 
 typedef struct {
@@ -56,14 +56,15 @@ static int part_for(unsigned id)
 {
     switch (id) {
     case BLOCK_IRON: return IRON;
-    case BLOCK_REDSTONE_BLOCK: case BLOCK_OBSERVER:
-    case BLOCK_BARREL: case BLOCK_SLIME: case BLOCK_HONEY:
+    case BLOCK_REDSTONE_BLOCK: case BLOCK_BARREL:
+    case BLOCK_SLIME: case BLOCK_HONEY:
     case BLOCK_NOTE_BLOCK:
     case BLOCK_TARGET: case BLOCK_HOPPER: case BLOCK_DROPPER:
     case BLOCK_REDSTONE_LAMP:
         return SOLIDS;
     case BLOCK_PISTON: case BLOCK_STICKY_PISTON:
     case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD: return PISTONS;
+    case BLOCK_OBSERVER: return OBSERVERS;
     case BLOCK_GLASS: return GLASS;
     case BLOCK_REDSTONE_WIRE: return DUST;
     case BLOCK_REDSTONE_REPEATER: return REPEATERS;
@@ -78,7 +79,7 @@ static int part_for(unsigned id)
 
 static bool solid_part(int kind)
 {
-    return kind == SOLIDS || kind == IRON || kind == PISTONS;
+    return kind == SOLIDS || kind == IRON || kind == PISTONS || kind == OBSERVERS;
 }
 
 static bool cube_part(int kind)
@@ -409,7 +410,8 @@ WorldRenderer *world_renderer_create(World *world, const BlockRenderer *blocks)
         blocks->atlas, blocks->iron_texture, blocks->glass_texture, blocks->wire_atlas,
         blocks->minecraft_atlas, blocks->minecraft_atlas,
         blocks->powered_rail_atlas, blocks->activator_rail_atlas,
-        blocks->torch_atlas, blocks->minecraft_atlas, blocks->minecraft_atlas
+        blocks->torch_atlas, blocks->minecraft_atlas, blocks->minecraft_atlas,
+        blocks->minecraft_atlas
     };
     for (int kind = 0; kind < PARTS; ++kind) {
         r->materials[kind] = LoadMaterialDefault();

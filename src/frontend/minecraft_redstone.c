@@ -7,15 +7,18 @@
 #include <string.h>
 
 enum {
-    LEVER, REPEATER, COMPARATOR, PISTON, FAMILY_COUNT,
+    LEVER, REPEATER, COMPARATOR, PISTON, OBSERVER, FAMILY_COUNT,
     LEVER_VARIANTS = 24, REPEATER_VARIANTS = 64, COMPARATOR_VARIANTS = 16,
     PISTON_BASE_VARIANTS = 2*DIR_COUNT, PISTON_HEAD_FIRST = 2*PISTON_BASE_VARIANTS,
     PISTON_VARIANTS = PISTON_HEAD_FIRST + 2*DIR_COUNT,
+    OBSERVER_VARIANTS = 2*DIR_COUNT,
     KEY_SIZE = 84, ATLAS_TILE = 32, ATLAS_COLUMNS = 8, ATLAS_ROWS = 4,
     ATLAS_TEXTURES = ATLAS_COLUMNS*ATLAS_ROWS
 };
 
-static const char *const family_names[] = {"lever", "repeater", "comparator", "piston"};
+static const char *const family_names[] = {
+    "lever", "repeater", "comparator", "piston", "observer"
+};
 
 struct MinecraftRedstone {
     BlockGeometry *families[FAMILY_COUNT];
@@ -35,6 +38,7 @@ static unsigned family(BlockId id)
     case BLOCK_REDSTONE_COMPARATOR: return COMPARATOR;
     case BLOCK_PISTON: case BLOCK_STICKY_PISTON:
     case BLOCK_PISTON_HEAD: case BLOCK_STICKY_PISTON_HEAD: return PISTON;
+    case BLOCK_OBSERVER: return OBSERVER;
     default: return FAMILY_COUNT;
     }
 }
@@ -78,6 +82,13 @@ static void variant_keys(unsigned kind, char keys[][KEY_SIZE], unsigned count)
                 snprintf(keys[i], KEY_SIZE, "facing=%s,short=false,type=%s",
                          axes[i%DIR_COUNT], i-PISTON_HEAD_FIRST < DIR_COUNT ? "normal" : "sticky");
             }
+            break;
+        case OBSERVER:
+            /* Voxilog stores the output direction; Minecraft FACING points
+             * toward the observed block on the opposite side. */
+            snprintf(keys[i], KEY_SIZE, "facing=%s,powered=%s",
+                     axes[direction_opposite((Direction)(i%DIR_COUNT))],
+                     flags[i/DIR_COUNT]);
             break;
         }
     }
@@ -142,7 +153,10 @@ static bool bake_variant(const ResourcePack *pack, Atlas *atlas,
 
 static BlockGeometry *load_family(const ResourcePack *pack, Atlas *atlas, unsigned kind)
 {
-    static const unsigned counts[] = {LEVER_VARIANTS, REPEATER_VARIANTS, COMPARATOR_VARIANTS, PISTON_VARIANTS};
+    static const unsigned counts[] = {
+        LEVER_VARIANTS, REPEATER_VARIANTS, COMPARATOR_VARIANTS,
+        PISTON_VARIANTS, OBSERVER_VARIANTS
+    };
     char keys[REPEATER_VARIANTS][KEY_SIZE];
     const char *key_paths[REPEATER_VARIANTS];
     MinecraftVariant variants[REPEATER_VARIANTS];
@@ -229,6 +243,10 @@ const BlockGeometry *minecraft_redstone_geometry(const MinecraftRedstone *models
     } else if (kind == COMPARATOR) {
         index = horizontal((Direction)state.data.comparator.facing)*4 +
             state.data.comparator.subtract*2 + state.data.comparator.powered;
+    } else if (kind == OBSERVER) {
+        unsigned facing = state.data.observer.facing;
+        if (facing >= DIR_COUNT) facing = DIR_NORTH;
+        index = state.data.observer.powered*DIR_COUNT + facing;
     } else {
         unsigned facing = state.data.piston.facing;
         if (facing >= DIR_COUNT) facing = DIR_NORTH;
